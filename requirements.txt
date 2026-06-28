@@ -1,0 +1,19 @@
+# Victor v4.6 — core dependencies
+chromadb>=0.4.0
+sentence-transformers>=2.2.0
+networkx>=3.0
+click>=8.0
+rich>=13.0
+numpy>=1.24.0
+scipy>=1.10.0
+ollama>=0.1.0
+openai>=1.0.0
+pillow>=10.0.0
+typer>=0.9.0
+
+# Optional: camera sensor pipeline (needs GPU for real CLIP)
+# torch>=2.0.0
+# clip-interrogator>=0.6.0
+
+# Dev / test
+pytest>=7.0.0

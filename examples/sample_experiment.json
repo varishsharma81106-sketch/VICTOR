@@ -1,0 +1,17 @@
+{
+  "name": "Baseline vs Improved Model",
+  "description": "Comparing phi3-mini and qwen2.5-7b on retrieval accuracy",
+  "results": {
+    "precision_at_5": {"baseline": 0.62, "improved": 0.78},
+    "recall_at_10": {"baseline": 0.45, "improved": 0.68},
+    "mrr": {"baseline": 0.55, "improved": 0.72}
+  },
+  "model": "qwen2.5:7b",
+  "technique": "agentic-retrieval",
+  "date": "2026-06-01",
+  "claims_tested": [
+    "Agentic retrieval improves precision@5 by >10 points",
+    "The improved model achieves recall@10 above 0.60"
+  ],
+  "notes": "Run on SciFact validation set, 200 queries"
+}

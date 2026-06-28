@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+
+# Victor local data — graphs, vector stores, ingested research data
+.victor/
+*.chroma/
+chroma_db/
+data/*.jsonl
+!examples/*.jsonl
+
+# Secrets / local config — never commit these
+.env
+*.env.local
+*api_key*
+*.pem
+*.key
+
+# Local model caches
+.ollama/
+models/
+
+# OS / editor noise
+.DS_Store
+.vscode/
+.idea/
+
+# Test / coverage artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Data files (too large for git)
+data/data/
+data/scifact.tar.gz
+
+# Build artifacts
+*.egg
+*.whl
