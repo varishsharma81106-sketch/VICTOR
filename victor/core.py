@@ -296,7 +296,18 @@ class Victor:
         filepath:       str | Path,
         title:          Optional[str]  = None,
         extract_claims: Optional[bool] = None,
+        source_type:    Optional[str]  = None,
     ) -> Dict[str, Any]:
+        """Ingest a file into the knowledge graph.
+
+        Parameters
+        ──────────
+        source_type:
+            Override the node type for the source document.
+            ``"paper"`` → PAPER (LITERATURE tier, weight 0.70).
+            ``"note"``  → NOTE (NOTE tier, weight 0.50).
+            ``None``    → let the ingestor decide (default behaviour).
+        """
         path = Path(filepath)
         if not path.exists():
             raise FileNotFoundError(filepath)
@@ -312,7 +323,14 @@ class Victor:
         if extract_claims is not None and hasattr(ingestor, "extract_claims"):
             ingestor.extract_claims = extract_claims
 
-        result = ingestor.ingest(path, title)
+        # Pass source_type through to the ingestor if it accepts it.
+        # Only MarkdownIngestor supports this currently; other ingestors
+        # determine their type from the file format (PDF → paper, JSON → experiment).
+        sig = inspect.signature(ingestor.ingest)
+        if "source_type" in sig.parameters:
+            result = ingestor.ingest(path, title, source_type=source_type)
+        else:
+            result = ingestor.ingest(path, title)
         return self._file_ingest_result(result)
 
     def _file_ingest_result(self, result: IngestResult) -> Dict[str, Any]:
@@ -527,6 +545,13 @@ class Victor:
         """Suppress a node's content from LLM answers. Graph structure unaffected."""
         ok = self.graph.mask_node(node_id)
         if ok:
+            # Delete the node's embedding chunks from ChromaDB to close the
+            # embedding covert channel — masked node embeddings must not remain
+            # queryable by cosine similarity.
+            try:
+                self.vector_store.delete_node_chunks(node_id)
+            except Exception as exc:
+                logger.warning("ChromaDB chunk deletion failed for %s: %s", node_id, exc)
             self.graph.save()
         self._write_mask_audit("mask", node_id, ok)
         return ok

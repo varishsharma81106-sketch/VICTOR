@@ -1,33 +1,20 @@
 """
 VictorVectorStore — ChromaDB persistent vector store.
 
-SECURITY NOTE — Embedding covert channel (future work, not a current threat):
-  When a node is masked, its text embedding is still stored in ChromaDB and
-  remains queryable by cosine similarity.  An adversarial model that can issue
-  many queries and observe which ones produce high-similarity masked-anchor
-  results can progressively narrow down what the masked content says without
-  ever reading it directly (standard membership-inference attack on the vector
-  store).
+SECURITY NOTE — Embedding covert channel:
+  Implemented Option A (2026-06-28): when a node is masked, its embedding
+  chunks are deleted from ChromaDB via delete_node_chunks(), called from
+  core.py mask(). This closes the membership-inference attack vector —
+  masked node embeddings are no longer queryable by cosine similarity.
+  On unmask, the node's content should be re-embedded and re-inserted.
 
-  This is NOT a threat in the current single-user, trusted-model deployment.
-  It becomes relevant when:
-    (a) Victor federates across devices and shares a vector store, or
-    (b) an untrusted third-party model is introduced (Phase 5+).
-
-  Fix when needed — Option A (simplest, complete):
-    On mask:   delete the node's embedding chunks from ChromaDB
-               (self.delete_by_node_id(node_id))
-    On unmask: re-embed and re-insert the node's content chunks
-
-  Option B (more flexible): separate public/masked ChromaDB collections;
-  retriever queries only the public collection; masked collection queried
-  only during explicit unmask operations.
-
-  Add a delete_by_node_id() method here when implementing either option.
   See VICTOR_WHAT_IS_BUILT.md security notes for full discussion.
 """
+import logging
 from typing import List, Dict, Any, Optional
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 from .models import TextChunk, RetrievedChunk
 from .embedder import LocalEmbedder
@@ -124,8 +111,35 @@ class VictorVectorStore:
         return chunks
 
     def delete_source(self, source_id: str):
-        self._init()
-        self._collection.delete(where={"source_id": source_id})
+        """
+        Delete all vector chunks for a given source document.
+        Delegates to delete_node_chunks() for consistent error handling.
+        """
+        self.delete_node_chunks(source_id)
+
+    def delete_node_chunks(self, node_id: str) -> int:
+        """
+        Delete all vector chunks whose source_id matches node_id.
+        Called when a node is masked to close the embedding covert channel —
+        masked node embeddings must not remain queryable.
+
+        Returns the count of deleted items (0 if none matched).
+        Handles exceptions gracefully so a ChromaDB failure never breaks
+        the mask operation.
+        """
+        try:
+            self._init()
+            existing = self._collection.get(
+                where={"source_id": node_id},
+                include=[],
+            )
+            n_items = len(existing.get("ids", []))
+            if n_items > 0:
+                self._collection.delete(where={"source_id": node_id})
+            return n_items
+        except Exception as exc:
+            logger.warning("Failed to delete chunks for node %s: %s", node_id, exc)
+            return 0
 
     def count(self) -> int:
         self._init()

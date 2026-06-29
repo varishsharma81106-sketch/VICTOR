@@ -64,7 +64,7 @@ class NLICrossEncoder:
     #   scores[[-7.22, 1.43, 4.98]] for an entailment pair → argmax=2 → should be "entailment".
     # _load() auto-detects label order from model config (id2label) when available,
     # so this default applies only to models that don't expose id2label.
-    _LABEL_ORDER = ["contradiction", "neutral", "entailment"]
+    _LABEL_ORDER = ["contradiction", "entailment", "neutral"]  # auto-detection overrides this; fallback only
     _LABEL_MAP   = {
         "contradiction": "contradict",
         "entailment":    "confirm",
@@ -172,11 +172,11 @@ class NLICrossEncoder:
             ("A dog is sleeping.", "An animal is resting.", "confirm"),
             ("The sky is blue.", "The sky is green.", "contradict"),
         ]
-        print("  Smoke-testing label order…")
+        print("  Smoke-testing label order...")
         for premise, hypothesis, expected in pairs:
             direction, conf = self.predict(premise, hypothesis)
-            icon = "✓" if direction == expected else "✗"
-            print(f"    {icon} '{premise}' / '{hypothesis}' → {direction} (conf={conf:.2f}), expected {expected}")
+            icon = "OK" if direction == expected else "FAIL"
+            print(f"    [{icon}] '{premise}' / '{hypothesis}' -> {direction} (conf={conf:.2f}), expected {expected}")
             if direction != expected:
                 order_str = ", ".join(getattr(self, "_label_order", self._LABEL_ORDER))
                 raise RuntimeError(
@@ -193,7 +193,7 @@ class NLICrossEncoder:
                     f"Pass the correct order via --nli-label-order (CLI) or "
                     f"label_order= (constructor)."
                 )
-        print("  Label order OK ✓")
+        print("  Label order OK")
         return True
 
     def predict(self, premise: str, hypothesis: str) -> tuple:
@@ -464,16 +464,66 @@ class EvidenceWeighter:
         experiment  → CONFIRMS      → claim
         experiment  → CONTRADICTS   → claim
         experiment  → INCONCLUSIVE  → claim
+
+    Masking enforcement: if a claim node is masked, summarize_claim() returns
+    a ClaimEvidenceSummary with a masked placeholder instead of the real
+    claim_text.  Evidence counts are withheld — they could indirectly disclose
+    what the node says.  This is defense-in-depth: the tools layer (tools.py)
+    and retrieval layer (retrieve.py) also enforce masking, but callers of
+    EvidenceWeighter directly (e.g. core.py's gaps() and evidence() methods)
+    were not protected.
     """
 
     def __init__(self, graph: "VictorKnowledgeGraph"):
         self.graph = graph
 
+    @staticmethod
+    def _masked_summary(claim_id: str, node_data: dict) -> ClaimEvidenceSummary:
+        """
+        Return a ClaimEvidenceSummary that preserves the node's existence
+        and structural position without disclosing its content.
+
+        The claim_text is replaced by a [MASKED] anchor matching the pattern
+        used in tools.py and retrieve.py.  Evidence counts (n_confirms, etc.)
+        are zeroed — revealing that a masked claim has 3 confirming experiments
+        would indirectly disclose information about its content.
+        """
+        ntype = node_data.get("ntype", "claim")
+        label = (node_data.get("label") or "")[:40]
+        epistemic = node_data.get("metadata", {}).get(
+            "epistemic_status", "literature"
+        )
+        return ClaimEvidenceSummary(
+            claim_id   = claim_id,
+            claim_text = (
+                f"[MASKED — {ntype} '{label}"
+                f"{'...' if len(node_data.get('label') or '') > 40 else ''}'"
+                f" — content withheld. Use 'victor unmask {claim_id[:16]}' to reveal.]"
+            ),
+            epistemic_status        = epistemic,
+            confidence              = 0.0,
+            n_confirms              = 0,
+            n_contradicts           = 0,
+            n_inconclusive          = 0,
+            supporting_experiments  = [],
+            conflicting_experiments = [],
+            gap                     = True,  # masked claims are still gaps — researcher needs to know
+        )
+
     def summarize_claim(self, claim_id: str) -> Optional[ClaimEvidenceSummary]:
-        """Return a full evidence summary for one claim node, or None if not found."""
+        """
+        Return a full evidence summary for one claim node, or None if not
+        found.  If the claim node is masked, returns a masked anchor summary
+        that preserves referential presence without disclosing content.
+        """
         claim_node = self.graph.get_node(claim_id)
         if claim_node is None:
             return None
+
+        # ── MASKING GATE ──────────────────────────────────────────────────
+        if self.graph.node_is_masked(claim_id):
+            return self._masked_summary(claim_id, claim_node)
+        # ─────────────────────────────────────────────────────────────────
 
         claim_text = claim_node.get("label", "")
         epistemic  = claim_node.get("metadata", {}).get(

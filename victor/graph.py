@@ -558,6 +558,8 @@ class VictorKnowledgeGraph:
         for nid, emb in self._embeddings.items():
             if not self._g.has_node(nid):
                 continue
+            if self.node_is_masked(nid):
+                continue
             node_data = self._g.nodes[nid]
             if ntype_filter and node_data.get("ntype") != ntype_filter:
                 continue
