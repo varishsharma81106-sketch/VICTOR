@@ -112,10 +112,10 @@ def load_scifact_data(
     claims_path: Optional[str] = None,
 ) -> List[EvalSample]:
     if corpus_path is not None and claims_path is not None:
-        print(f"Loading corpus from {corpus_path}…")
+        print(f"Loading corpus from {corpus_path}...")
         raw_corpus = _load_local_jsonl(corpus_path)
         print(f"  Loaded {len(raw_corpus)} corpus documents")
-        print(f"Loading claims from {claims_path}…")
+        print(f"Loading claims from {claims_path}...")
         raw_claims = _load_local_jsonl(claims_path)
         print(f"  Loaded {len(raw_claims)} claims")
         claims_ds = raw_claims
@@ -127,10 +127,10 @@ def load_scifact_data(
                 "Install it with:  pip install datasets\n"
                 "Or pass corpus_path= and claims_path= to load local JSONL files."
             )
-        print("Loading allenai/scifact dataset (claims split)…")
+        print("Loading allenai/scifact dataset (claims split)...")
         claims_ds = _hf_load_dataset("allenai/scifact", "claims", split="test")
         print(f"  Loaded {len(claims_ds)} claims")
-        print("Loading allenai/scifact dataset (corpus split)…")
+        print("Loading allenai/scifact dataset (corpus split)...")
         corpus_ds = _hf_load_dataset("allenai/scifact", "corpus", split="corpus")
         print(f"  Loaded {len(corpus_ds)} corpus documents")
 
@@ -196,7 +196,6 @@ def load_scifact_data(
     if n_samples is not None and n_samples < len(samples):
         rng = random.Random(seed)
         samples = rng.sample(samples, n_samples)
-
     print(f"  Prepared {len(samples)} (claim, abstract, label) triples")
     return samples
 
@@ -220,14 +219,14 @@ def evaluate(
     skipped = 0
     nli_overrides = 0
 
-    print(f"\nEvaluating {len(samples)} samples (threshold={confidence_threshold})…")
+    print(f"\nEvaluating {len(samples)} samples (threshold={confidence_threshold})...")
     print("-" * 60)
 
     for i, sample in enumerate(samples):
         if len(samples) < 20 or (i + 1) % 10 == 0 or i == 0:
             print(
                 f"  [{i+1}/{len(samples)}] "
-                f"claim={sample.claim_id[:12]}… "
+                f"claim={sample.claim_id[:12]}... "
                 f"gold={sample.gold_direction}",
                 end="", flush=True,
             )
@@ -250,7 +249,7 @@ def evaluate(
             skipped += 1
             if len(samples) < 20 or (i + 1) % 10 == 0 or i == 0:
                 print(
-                    f" → pred={pred_dir} "
+                    f" -> pred={pred_dir} "
                     f"(conf={prediction.confidence:.2f}, SKIPPED) "
                     f"[{elapsed:.1f}s]"
                 )
@@ -264,10 +263,10 @@ def evaluate(
         if is_correct:
             correct += 1
 
-        status = "✓" if is_correct else "✗"
+        status = "[OK]" if is_correct else "[FAIL]"
         if len(samples) < 20 or (i + 1) % 10 == 0 or i == 0:
             print(
-                f" → pred={pred_dir} (conf={prediction.confidence:.2f}) "
+                f" -> pred={pred_dir} (conf={prediction.confidence:.2f}) "
                 f"{status} [{elapsed:.1f}s]"
             )
 
@@ -316,7 +315,7 @@ def print_report(result: BenchmarkResult) -> None:
     print(f"  Confidence threshold:    {result.confidence_threshold}")
     print(f"\n  Overall accuracy:        {result.accuracy:.1%}")
     threshold_met = result.accuracy >= _PRD_THRESHOLD
-    status = "✅ PASS" if threshold_met else "❌ FAIL"
+    status = "PASS" if threshold_met else "FAIL"
     print(f"  PRD threshold (>85%):    {status}  ({'meets' if threshold_met else 'below'} target)")
     print("\n  Per-class metrics:")
     print(f"  {'Direction':<18} {'Prec':>6} {'Recall':>6} {'F1':>6} {'Support':>8}")
@@ -355,9 +354,9 @@ def dry_run_report(samples: list) -> None:
         print(f"    {direction:<18} {count:>5d}  ({pct:5.1f}%)")
     print(f"\n  Example claims (first 5):")
     for sample in samples[:5]:
-        print(f"\n    Claim: {sample.claim_text[:100]}…")
+        print(f"\n    Claim: {sample.claim_text[:100]}...")
         print(f"    Gold:  {sample.gold_direction}")
-        print(f"    Abstract: {sample.abstract_text[:100]}…")
+        print(f"    Abstract: {sample.abstract_text[:100]}...")
     print("\n" + "=" * 60)
     print("  Dry run complete. Run without --dry-run to evaluate ConflictDetector.")
     print("=" * 60)
@@ -470,7 +469,7 @@ def main(argv: Optional[List[str]] = None) -> None:
             label_order = [s.strip() for s in args.nli_label_order.split(",")]
             print(f"  Using explicit label order: {label_order}")
 
-        print(f"Loading NLI cross-encoder: {args.nli_model} …")
+        print(f"Loading NLI cross-encoder: {args.nli_model} ...")
         nli = NLICrossEncoder(model_name=args.nli_model, label_order=label_order)
         mode = "primary (NLI decides direction)" if args.nli_primary else f"cross-check (threshold={args.nli_threshold})"
         print(f"  NLI mode: {mode}")
@@ -480,14 +479,14 @@ def main(argv: Optional[List[str]] = None) -> None:
             try:
                 nli.validate_label_order()
             except RuntimeError as exc:
-                print(f"\n❌ Label order smoke test FAILED — aborting benchmark.\n{exc}")
+                print(f"\nLabel order smoke test FAILED -- aborting benchmark.\n{exc}")
                 sys.exit(1)
         else:
             print("  Skipping label-order smoke test (--skip-nli-smoke-test).")
     elif args.nli_primary:
         print("WARNING: --nli-primary has no effect without --nli-model. Ignored.")
 
-    print("Creating inference client…")
+    print("Creating inference client...")
     client = create_inference_client(config)
     detector = ConflictDetector(
         llm=client,
@@ -498,7 +497,7 @@ def main(argv: Optional[List[str]] = None) -> None:
 
     if hasattr(client, "is_available") and not client.is_available() and not args.use_mock_llm:
         print(
-            "\n⚠ WARNING: No LLM backend is available.\n"
+            "\nWARNING: No LLM backend is available.\n"
             "  Falling back to mock mode (all predictions will be 'inconclusive').\n"
             "  To use a real model:\n"
             "    - Start Ollama:  ollama serve\n"

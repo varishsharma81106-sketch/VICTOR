@@ -158,7 +158,21 @@ class MarkdownIngestor(IngestorBase):
         self.extract_claims        = extract_claims
         self.max_extraction_chunks = max_extraction_chunks
 
-    def ingest(self, filepath: Path, title: Optional[str] = None) -> IngestResult:
+    def ingest(
+        self,
+        filepath:    Path,
+        title:       Optional[str] = None,
+        source_type: Optional[str] = None,
+    ) -> IngestResult:
+        """Ingest a Markdown/text file.
+
+        Parameters
+        ──────────
+        source_type:
+            Override the node type.  ``"paper"`` → NodeType.PAPER (epistemic
+            weight 0.70, LITERATURE tier).  ``None`` or ``"note"`` →
+            NodeType.NOTE (epistemic weight 0.50, NOTE tier).
+        """
         text = filepath.read_text(encoding="utf-8", errors="ignore")
         if not text.strip():
             raise ValueError(f"Empty file: {filepath}")
@@ -166,13 +180,21 @@ class MarkdownIngestor(IngestorBase):
         source_id    = str(uuid.uuid5(uuid.NAMESPACE_URL, str(filepath)))
         source_title = title or filepath.stem
 
+        # Determine node type based on source_type parameter.
+        # Real research papers should use PAPER (LITERATURE tier, weight 0.70)
+        # rather than NOTE (NOTE tier, weight 0.50).
+        if source_type == "paper":
+            node_type = NodeType.PAPER
+        else:
+            node_type = NodeType.NOTE
+
         chunks = self.chunker.chunk(
-            text, source_id, NodeType.NOTE, source_title,
+            text, source_id, node_type, source_title,
             extra_metadata={"filepath": str(filepath)},
         )
 
-        claims:   List[Claim] = []
-        concepts: List[str]   = []
+        claims:   List[Claim]   = []
+        concepts: List[str]     = []
 
         if self.extract_claims:
             claims, concepts = _extract_per_chunk(
@@ -181,7 +203,7 @@ class MarkdownIngestor(IngestorBase):
             )
 
         return IngestResult(
-            source_id=source_id, node_type=NodeType.NOTE, title=source_title,
+            source_id=source_id, node_type=node_type, title=source_title,
             chunks=chunks, claims=claims, concepts=concepts,
         )
 

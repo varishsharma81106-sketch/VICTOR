@@ -39,6 +39,7 @@ setup(
             "ruff>=0.4.0",
         ],
     },
+    python_requires=">=3.12",
     entry_points={
         "console_scripts": ["victor=victor.cli:cli"],
     },

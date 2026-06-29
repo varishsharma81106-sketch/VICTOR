@@ -84,12 +84,17 @@ def _print_node_table(nodes, title: str):
     "--extract-claims/--no-extract-claims", "extract_claims", default=None,
     help="Force claim extraction on/off for this file (default: config setting).",
 )
+@click.option(
+    "--type", "source_type", default=None,
+    type=click.Choice(["paper", "note"], case_sensitive=False),
+    help="Override source type: paper (LITERATURE tier) or note (NOTE tier).",
+)
 @click.pass_context
-def ingest(ctx, filepath, title, extract_claims):
+def ingest(ctx, filepath, title, extract_claims, source_type):
     """Ingest a PDF, Markdown/text note, or experiment JSON file."""
     v = _v(ctx)
     try:
-        result = v.ingest_file(filepath, title=title, extract_claims=extract_claims)
+        result = v.ingest_file(filepath, title=title, extract_claims=extract_claims, source_type=source_type)
     except Exception as e:
         console.print(f"[red]Ingestion failed:[/red] {e}")
         raise SystemExit(1)
@@ -112,7 +117,7 @@ def ingest(ctx, filepath, title, extract_claims):
             console.print("  [dim]No claims matched closely enough to link.[/dim]")
         for link in result["linked_claims"]:
             console.print(
-                f"    • {link['edge'].upper()} → {link['claim'][:80]} "
+                f"    • {link['edge'].upper()} -> {link['claim'][:80]} "
                 f"(confidence={link['confidence']:.2f})"
             )
 
@@ -322,9 +327,9 @@ def ask(ctx, query, full, show_patterns, digest):
     retriever_type = stats.get("retriever_type", "unknown")
     tool_count = stats.get("tool_count", 0)
     if retriever_type == "AgenticRetriever":
-        console.print(f"[dim]→ Agentic loop active ({tool_count} tools available)[/dim]")
+        console.print(f"[dim]-> Agentic loop active ({tool_count} tools available)[/dim]")
     else:
-        console.print(f"[dim]→ Single-shot mode[/dim]")
+        console.print(f"[dim]-> Single-shot mode[/dim]")
 
     # Use pattern-aware ask if requested
     if show_patterns:
@@ -571,7 +576,7 @@ def export(ctx, node_ids, output, no_edges):
     result = v.export(list(node_ids), output, include_edges=not no_edges)
     console.print(
         f"[green]Exported[/green] {result['n_nodes']} node(s), "
-        f"{result['n_edges']} edge(s) → {result['filepath']}"
+        f"{result['n_edges']} edge(s) -> {result['filepath']}"
     )
 
 
