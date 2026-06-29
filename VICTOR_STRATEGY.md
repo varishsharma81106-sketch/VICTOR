@@ -27,6 +27,7 @@
 1. **Masked memory** — graph structure stays visible for reasoning, content withheld from LLM until explicitly unmasked. No competitor has a redaction/trust boundary. Zero.
 2. **Epistemic status hierarchy** — MEASUREMENT > EXPERIMENT > LITERATURE > NOTE > HYPOTHESIS. No competitor tracks evidence quality tiers. Generic numeric confidence (which the industry now considers table stakes) is not the same as typed scientific-evidence ladders.
 3. **Compounding graph** — after 6 months of use, Victor knows your domain better than any fresh instance. Network effect inside one user's knowledge base. Not a feature — accumulated state.
+4. **Tamper-evident disclosure log** — every mask/unmask decision is recorded with caller provenance. When a published paper is challenged, Victor can produce a log of exactly what the AI assistant was permitted to see and when. No competitor has this. It maps directly to OWASP ASI06 compliance ("redact-at-rest / hydrate-on-return") and to research integrity requirements that are becoming standard in computational fields.
 
 ---
 
@@ -108,7 +109,7 @@ Add masking gate to `find_gaps()` / `summarize_claim()` / `summarize_all_claims(
 > "It tries to understand itself and enhance its own mind throughout the user's chats and knowledge."
 
 One-sentence version:
-> **"Victor is a research companion that gets smarter the more you use it — not from the cloud, but from your own accumulated knowledge."**
+> **"Victor is the only research AI that can prove what it was allowed to see — and what it wasn't."**
 
 ### What Makes This Defensible
 - **The compounding graph.** After 6 months, Victor knows your domain better than any new instance. Not a feature — accumulated state. Competitors can't copy this without the same time investment.

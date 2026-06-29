@@ -13,16 +13,20 @@ Do not read all documents. They will contradict each other on version-specific d
 
 ## The Living Documents
 
+All living documents are in the `docs/` directory. The canonical location for every document is `docs/`.
+
 | Document | Answers | Do not use it for |
 |----------|---------|-------------------|
-| `VICTOR_CANON.md` | What is Victor, fundamentally, when this disagrees with any other document? The motivating scenario, the architecture layers, the two security systems, modular deployment, who it's for. **This is the top authority on vision/identity** — it explicitly supersedes `VICTOR_FOUNDATION_v2.md` and `VICTOR_THEORY_v1.md` on those specific questions. | Code state, bug list, build steps |
-| `VICTOR_THEORY_v1.md` | What is the unit of value? What is the one job? | Implementation details, code, build order. If it ever conflicts with `VICTOR_CANON.md` on vision, CANON wins. |
-| `VICTOR_FOUNDATION_v2.md` | What are the design principles? What are the irreducible components? What are the layers? | Current code state, bug list, build steps. If it ever conflicts with `VICTOR_CANON.md` on vision, CANON wins. |
-| `VICTOR_WHAT_IS_BUILT.md` | What exists in the code right now? What is broken? What is the next action? | Philosophy, long-term vision, hardware plans |
-| `VICTOR_BUILD_SEQUENCE.md` | What gets built in what order, from current state to physical device? | Current bugs, philosophy |
-| `VICTOR_ORIGINAL.md` | What did Varish actually say when he conceived this? | Technical decisions, build plans |
-| `VICTOR_MASTER_PRD_v3_6.md` | What's the Definition of Done? What's the risk register? What does the benchmark data say? What's the sequenced path to 90%+? | Long-term philosophy (see CANON / THEORY_v1), day-to-day current code state (see WHAT_IS_BUILT) |
-| `VICTOR_SCIFACT_ACCURACY_PLAN.md` | What exactly happened in each benchmark run? What is the diagnosed root cause? What is the ordered checklist to close DoD #4? | Philosophy, hardware, anything not directly about the SciFact benchmark |
+| [`VICTOR_CANON.md`](VICTOR_CANON.md) | What is Victor, fundamentally? The motivating scenario, architecture layers, two security systems, modular deployment. **Top authority on vision/identity.** | Code state, bug list, build steps |
+| [`VICTOR_THEORY_v1.md`](VICTOR_THEORY_v1.md) | What is the unit of value? What is the one job? | Implementation details, code, build order |
+| [`VICTOR_FOUNDATION_v2.md`](VICTOR_FOUNDATION_v2.md) | Design principles, irreducible components, system layers. | Current code state, bug list |
+| [`VICTOR_WHAT_IS_BUILT.md`](VICTOR_WHAT_IS_BUILT.md) | What exists in the code right now? What is broken? What is the next action? | Philosophy, long-term vision |
+| [`VICTOR_BUILD_SEQUENCE.md`](VICTOR_BUILD_SEQUENCE.md) | What gets built in what order, from current state to physical device? | Current bugs, philosophy |
+| [`VICTOR_ORIGINAL.md`](VICTOR_ORIGINAL.md) | What did Varish actually say when he conceived this? | Technical decisions, build plans |
+| [`VICTOR_MASTER_PRD_v3_6.md`](VICTOR_MASTER_PRD_v3_6.md) | Definition of Done, risk register, benchmark data, path to 90%+. | Philosophy, day-to-day code state |
+| [`VICTOR_SCIFACT_ACCURACY_PLAN.md`](VICTOR_SCIFACT_ACCURACY_PLAN.md) | Benchmark history, root cause diagnosis, ordered checklist to close DoD #4. | Philosophy, hardware |
+| [`VICTOR_STRATEGY.md`](VICTOR_STRATEGY.md) | Competitive landscape, MCP server plan, startup viability, roadmap. | Code state, philosophy |
+| [`PROJECT_UPDATES.md`](PROJECT_UPDATES.md) | Today's changes, future recommendations, known issues. | Long-term vision |
 
 ---
 

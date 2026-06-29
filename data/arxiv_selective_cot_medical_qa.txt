@@ -1,0 +1,46 @@
+To Reason or Not to: Selective Chain-of-Thought in Medical Question Answering
+
+Authors: Zaifu Zhan, Min Zeng, Shuang Zhou, Yiran Song, Xiaoyi Chen, Yu Hou, Yifan Wu, Yang Ruan, Rui Zhang
+
+Abstract:
+Objective: To improve the efficiency of medical question answering (MedQA) with large language models (LLMs) by avoiding unnecessary reasoning while maintaining accuracy. Methods: We propose Selective Chain-of-Thought (Selective CoT), an inference-time strategy that first predicts whether a question requires reasoning and generates a rationale only when needed. Two open-source LLMs (Llama-3.1-8B and Qwen-2.5-7B) were evaluated on four biomedical QA benchmarks—HeadQA, MedQA-USMLE, MedMCQA, and PubMedQA. Metrics included accuracy, total generated tokens, and inference time. Results: Selective CoT reduced inference time by 13–45% and token usage by 8–47% with minimal accuracy loss (≤4%). In some model–task pairs, it achieved both higher accuracy and greater efficiency than standard CoT. Compared with fixed-length CoT, Selective CoT reached similar or superior accuracy at substantially lower computational cost. Discussion: Selective CoT dynamically balances reasoning depth and efficiency by invoking explicit reasoning only when beneficial, reducing redundancy on recall-type questions while preserving interpretability. Conclusion: Selective CoT provides a simple, model-agnostic, and cost-effective approach for medical QA, aligning reasoning effort with question complexity to enhance real-world deployability of LLM-based clinical systems.
+
+1. Introduction
+
+Medical question answering (QA) broadly including both clinical and biomedical QA, is an important challenge across medicine and the biomedical sciences, as it demands two competencies: precise factual recall of vast, long-tail biomedical knowledge and structured reasoning across clinical context, evidence, and distractors. Traditional NLP pipelines (keyword-matching search, manually crafted feature-based models, machine learning models, or rule-based systems) have struggled to meet this dual requirement: they are brittle to paraphrase and domain shift, offer limited compositionality, and often fail to integrate dispersed cues into coherent, stepwise judgments. The advent of large language models (LLMs) has materially changed this landscape along the two axes most stressed by MedQA: (1) knowledge coverage and access and (2) reasoning capacity.
+
+Chain-of-thought (CoT) prompting, in which a model generates intermediate reasoning steps before giving a final answer, has emerged as a strong default for such settings. CoT can improve logicality and interpretability when questions require multi-step reasoning. However, always generating long rationales carries nontrivial costs: more output tokens, higher latency, and increased compute expenditure, especially on knowledge-recall questions where explicit reasoning is unnecessary. To avoid this waste, we introduce Selective Chain-of-Thought (Selective CoT), a simple and effective inference-time routing strategy that first decides whether a question requires explicit reasoning and, only when warranted, generates a rationale before answering.
+
+2. Methods
+
+2.1 Task and Datasets
+
+Medical QA is a specialized form of question answering that focuses on understanding, retrieving, and reasoning over medical knowledge. We evaluated our approach on four complementary datasets:
+
+HeadQA: A Spanish multiple-choice medical QA dataset built from official healthcare entrance and specialization exams in Spain.
+
+MedQA-USMLE: Contains multiple-choice questions sourced from the United States Medical Licensing Examination.
+
+MedMCQA: A large-scale, multi-disciplinary multiple-choice dataset derived from Indian medical entrance and postgraduate exams.
+
+PubMedQA: Targets biomedical literature question answering, where each instance poses a research-style question answered as yes/no/maybe.
+
+2.2 Selective Chain-of-thought
+
+Medical questions can be broadly grouped into (i) knowledge-recall items that can be answered directly from established medical facts and (ii) reasoning items that involve misleading cues, multi-step calculation, temporal ordering, or constraint composition. To balance accuracy and efficiency, we introduce Selective CoT, in which the model adaptively decides at inference time whether to invoke CoT. If the question is judged to require reasoning, CoT is enabled; otherwise, the system answers directly.
+
+3. Results
+
+Across four biomedical benchmarks, we compare standard CoT with Selective CoT for Llama-3.1-8B and Qwen2.5-7B. Overall, Selective CoT consistently reduces inference cost—wall-clock time drops by approximately 13-45% and output tokens often shrink by approximately 8-47%—with only minor accuracy changes (typically within 0-4%). Notably, Qwen2.5-7B on HeadQA is faster and more accurate, improving accuracy by 8.70% while cutting tokens by -19.0% and time by -17.6%. In sum, Selective CoT typically yields substantial speedups and token savings at minimal accuracy cost, and can even deliver simultaneous gains in both accuracy and efficiency for certain model-task pairs.
+
+4. Discussion
+
+The results demonstrate that not all medical questions benefit equally from explicit reasoning. Recall-type questions, which test straightforward factual knowledge, are better answered directly, while complex clinical scenarios involving multi-step reasoning, distractor analysis, or constraint satisfaction benefit from generated rationales. Selective CoT leverages this insight by routing questions through a reasoning gate that balances computational cost against accuracy needs.
+
+The Selective CoT approach has several practical implications for clinical AI deployment. First, reduced inference time and token usage translate directly to lower computational costs, making large-scale deployment more economically feasible. Second, the model-agnostic nature of the approach means it can be applied to any LLM without retraining. Third, the minimal accuracy loss (typically under 4%) suggests that efficiency gains do not come at a meaningful cost to clinical decision support quality.
+
+5. Conclusion
+
+Selective CoT provides a simple, model-agnostic, and cost-effective approach for medical QA. By dynamically aligning reasoning effort with question complexity, it enhances the real-world deployability of LLM-based clinical systems. The approach reduces unnecessary computational expenditure while maintaining or even improving accuracy on appropriate question types.
+
+Source: https://arxiv.org/html/2602.20130v1
