@@ -81,6 +81,8 @@ class BenchmarkResult:
     n_nli_overrides: int = 0
     n_total: int = 0
     confidence_threshold: float = 0.0
+    n_votes_per_sample: int = 1
+    n_unanimous: int = 0  # samples where all votes agreed
     per_class: Dict[str, ClassMetrics] = None  # type: ignore[assignment]
     confusion_matrix: Optional[Dict[str, Dict[str, int]]] = None
 
@@ -204,26 +206,44 @@ def get_label_distribution(samples: List[EvalSample]) -> Dict[str, int]:
     return Counter(s.gold_direction for s in samples)
 
 
+def _majority_vote(directions: List[str]) -> str:
+    """Return the most common direction from a list of votes.
+    Break ties by preferring 'contradict' > 'confirm' > 'inconclusive'.
+    """
+    counts = Counter(directions)
+    max_count = max(counts.values())
+    # Among directions with max_count, pick by priority order
+    for d in ["contradict", "confirm", "inconclusive"]:
+        if counts.get(d, 0) == max_count:
+            return d
+    return "inconclusive"
+
+
 def evaluate(
     samples: List[EvalSample],
     detector: ConflictDetector,
     confidence_threshold: float = 0.0,
+    n_votes: int = 1,
 ) -> BenchmarkResult:
     result = BenchmarkResult(
         n_total=len(samples),
         confidence_threshold=confidence_threshold,
+        n_votes_per_sample=n_votes,
     )
 
     correct = 0
     evaluated = 0
     skipped = 0
     nli_overrides = 0
+    unanimous = 0
 
-    print(f"\nEvaluating {len(samples)} samples (threshold={confidence_threshold})...")
+    vote_label = f" ({n_votes}x voting)" if n_votes > 1 else ""
+    print(f"\nEvaluating {len(samples)} samples (threshold={confidence_threshold}{vote_label})...")
     print("-" * 60)
 
     for i, sample in enumerate(samples):
-        if len(samples) < 20 or (i + 1) % 10 == 0 or i == 0:
+        show_progress = len(samples) < 20 or (i + 1) % 10 == 0 or i == 0
+        if show_progress:
             print(
                 f"  [{i+1}/{len(samples)}] "
                 f"claim={sample.claim_id[:12]}... "
@@ -232,25 +252,56 @@ def evaluate(
             )
 
         t0 = time.time()
-        prediction = detector.judge(
-            claim_text=sample.claim_text,
-            result_text=sample.abstract_text,
-        )
+
+        if n_votes <= 1:
+            # Single vote (original behavior)
+            prediction = detector.judge(
+                claim_text=sample.claim_text,
+                result_text=sample.abstract_text,
+            )
+            votes = [prediction.direction]
+            avg_confidence = prediction.confidence
+            nli_overrides += int(getattr(prediction, "nli_override", False))
+        else:
+            # Self-consistency voting: call judge() N times, majority vote
+            predictions = []
+            for _ in range(n_votes):
+                pred = detector.judge(
+                    claim_text=sample.claim_text,
+                    result_text=sample.abstract_text,
+                )
+                predictions.append(pred)
+
+            votes = [p.direction for p in predictions]
+            # Filter to valid directions
+            votes = [v if v in VALID_DIRECTIONS else "inconclusive" for v in votes]
+            avg_confidence = sum(p.confidence for p in predictions) / len(predictions)
+            nli_overrides += sum(1 for p in predictions if getattr(p, "nli_override", False))
+
+            # Majority vote
+            pred_dir = _majority_vote(votes)
+            prediction = predictions[0]  # use first for metadata
+            prediction = type(prediction)(
+                direction=pred_dir,
+                confidence=avg_confidence,
+                reason=f"[self-consistency {n_votes}x] votes={votes}",
+                nli_direction=prediction.nli_direction,
+                nli_confidence=prediction.nli_confidence,
+                nli_override=prediction.nli_override,
+            )
+
         elapsed = time.time() - t0
 
         pred_dir = prediction.direction
         if pred_dir not in VALID_DIRECTIONS:
             pred_dir = "inconclusive"
 
-        if getattr(prediction, "nli_override", False):
-            nli_overrides += 1
-
-        if prediction.confidence <= confidence_threshold:
+        if avg_confidence <= confidence_threshold:
             skipped += 1
-            if len(samples) < 20 or (i + 1) % 10 == 0 or i == 0:
+            if show_progress:
                 print(
                     f" -> pred={pred_dir} "
-                    f"(conf={prediction.confidence:.2f}, SKIPPED) "
+                    f"(conf={avg_confidence:.2f}, SKIPPED) "
                     f"[{elapsed:.1f}s]"
                 )
             result.n_skipped_confidence = skipped
@@ -263,16 +314,22 @@ def evaluate(
         if is_correct:
             correct += 1
 
+        # Track unanimity for voting mode
+        if n_votes > 1 and len(set(votes)) == 1:
+            unanimous += 1
+
         status = "[OK]" if is_correct else "[FAIL]"
-        if len(samples) < 20 or (i + 1) % 10 == 0 or i == 0:
+        if show_progress:
+            vote_info = f" votes={votes}" if n_votes > 1 else ""
             print(
-                f" -> pred={pred_dir} (conf={prediction.confidence:.2f}) "
-                f"{status} [{elapsed:.1f}s]"
+                f" -> pred={pred_dir} (conf={avg_confidence:.2f}) "
+                f"{status}{vote_info} [{elapsed:.1f}s]"
             )
 
     result.n_evaluated = evaluated
     result.n_skipped_confidence = skipped
     result.n_nli_overrides = nli_overrides
+    result.n_unanimous = unanimous
 
     if evaluated > 0:
         result.accuracy = correct / evaluated
@@ -313,6 +370,10 @@ def print_report(result: BenchmarkResult) -> None:
     print(f"  Skipped (low conf):      {result.n_skipped_confidence}")
     print(f"  NLI overrides fired:     {result.n_nli_overrides}")
     print(f"  Confidence threshold:    {result.confidence_threshold}")
+    if result.n_votes_per_sample > 1:
+        print(f"  Votes per sample:        {result.n_votes_per_sample}")
+        print(f"  Unanimous agreements:    {result.n_unanimous}/{result.n_evaluated} "
+              f"({result.n_unanimous / result.n_evaluated:.1%})" if result.n_evaluated else "")
     print(f"\n  Overall accuracy:        {result.accuracy:.1%}")
     threshold_met = result.accuracy >= _PRD_THRESHOLD
     status = "PASS" if threshold_met else "FAIL"
@@ -428,6 +489,18 @@ def build_parser() -> argparse.ArgumentParser:
             "before they corrupt 100+ samples."
         ),
     )
+    parser.add_argument(
+        "--self-consistency-votes",
+        type=int,
+        default=1,
+        metavar="N",
+        help=(
+            "Number of judge() calls per sample for self-consistency voting "
+            "(default: 1 = no voting). When N > 1, each sample is classified "
+            "N times and the majority vote is used. Improves accuracy at the "
+            "cost of N x more inference time."
+        ),
+    )
     return parser
 
 
@@ -527,6 +600,7 @@ def main(argv: Optional[List[str]] = None) -> None:
         samples=samples,
         detector=detector,
         confidence_threshold=args.confidence_threshold,
+        n_votes=args.self_consistency_votes,
     )
     print_report(result)
 
