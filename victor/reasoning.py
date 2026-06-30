@@ -390,23 +390,46 @@ class ConflictDetector:
         prompt = (
             "You are checking whether a piece of evidence CONFIRMS, CONTRADICTS, "
             "or is INCONCLUSIVE with respect to a claim.\n\n"
+            "IMPORTANT: Language models are statistically biased toward 'confirm'. "
+            "Actively resist this bias. Before choosing 'confirm', ask yourself: "
+            "does the evidence directly address the same specific finding as the "
+            "claim, and does it say the opposite? If yes, the answer is 'contradict', "
+            "not 'confirm'.\n\n"
             "Definitions:\n"
-            "- confirm: the evidence supports or is consistent with the claim.\n"
-            "- contradict: the evidence states or implies the OPPOSITE of the "
-            "claim's finding — not merely a different topic, but a direct "
-            "conflict in what is being asserted.\n"
-            "- inconclusive: the evidence is on a different topic, doesn't "
-            "address the claim, or is genuinely ambiguous.\n\n"
-            "Example:\n"
-            "Claim: \"Drug X reduces blood pressure.\"\n"
-            "Evidence: \"In a randomized trial, Drug X produced no significant "
-            "change in blood pressure compared to placebo.\"\n"
-            "-> contradict (same topic, opposite finding — not inconclusive).\n\n"
+            "- confirm: the evidence directly supports the specific finding stated "
+            "in the claim. The claim's assertion is upheld by the evidence.\n"
+            "- contradict: the evidence directly opposes the claim's specific finding. "
+            "The evidence and claim make incompatible assertions about the same thing. "
+            "Even if the wording differs, the core assertion is opposed.\n"
+            "- inconclusive: the evidence addresses a different aspect, uses a "
+            "different methodology, or is genuinely ambiguous. The evidence does "
+            "not directly address the specific assertion in the claim.\n\n"
+            "Examples:\n"
+            "\n"
+            "Example 1 (contradict):\n"
+            'Claim: "Drug X reduces blood pressure."\n'
+            'Evidence: "In a randomized trial, Drug X produced no significant '
+            'change in blood pressure compared to placebo."\n'
+            "-> contradict (same topic, opposite finding).\n\n"
+            "Example 2 (confirm):\n"
+            'Claim: "Drug X reduces blood pressure."\n'
+            'Evidence: "A double-blind trial showed Drug X lowered systolic BP '
+            'by 12 mmHg versus placebo (p<0.01)."'
+            "\n"
+            "-> confirm (same topic, same direction, quantitative support).\n\n"
+            "Example 3 (inconclusive):\n"
+            'Claim: "Drug X reduces blood pressure."\n'
+            'Evidence: "Drug X was well-tolerated with mild gastrointestinal '
+            'side effects in the trial population."'
+            "\n"
+            "-> inconclusive (addresses side effects, not efficacy).\n\n"
+            "Now classify the following:\n\n"
             f"Claim: {claim_text}\n\n"
             f"Evidence: {result_text}\n\n"
-            "First write one or two sentences of reasoning comparing the claim "
-            "to the evidence. Then give the direction and your confidence "
-            "(0.0 to 1.0) that the direction is correct."
+            "Step 1: Identify the specific assertion in the claim.\n"
+            "Step 2: Check whether the evidence addresses that same assertion.\n"
+            "Step 3: If yes, determine whether the evidence supports or opposes it.\n"
+            "Step 4: Give the direction and your confidence (0.0 to 1.0)."
         )
         try:
             resp = self.llm.generate_structured(
