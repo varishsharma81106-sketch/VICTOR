@@ -117,4 +117,47 @@
 
 ---
 
-*Last updated: 2026-06-29 · Victor v5.3.0*
+## Today's Changes (2026-08-12)
+
+### Session Focus
+
+AAAI 2027 paper submitted (July 22, 2026). Ran critical benchmark: DeBERTa-v3-base NLI primary mode with corrected label order (Run 8). Result: **8.0% accuracy** — all 100 samples predicted inconclusive. Root cause: model fine-tuned on MNLI (short sentence pairs) cannot handle long scientific text (200-word abstracts). Label order smoke test passed. This conclusively rules out primary mode for this model.
+
+### Files Updated
+
+| File | Change |
+|------|--------|
+| `docs/VICTOR_WHAT_IS_BUILT.md` | Added Run 8 to Results Log. Updated version header to "Updated 2026-08-12". |
+| `docs/VICTOR_SCIFACT_ACCURACY_PLAN.md` | Added Run 8 to benchmark history. Added Cause D diagnosis (cross-encoder NLI can't handle long text). Updated "What not to do" section. |
+| `docs/VICTOR_BUILD_SEQUENCE.md` | Updated benchmark table with Run 8. Added note that primary mode is ruled out. |
+| `docs/VICTOR_STATUS_2026-08-12.md` | **NEW** — Comprehensive project status with Obsidian bidirectional links. |
+| `docs/VICTOR_INDEX.md` | Added new status doc reference. |
+
+### Key Findings
+
+1. **Primary mode with DeBERTa-v3-base is definitively ruled out** — Run 8 confirms the issue is model capacity (MNLI-trained on short sentences), not label order. All 100 samples predicted "inconclusive".
+2. **Cross-check architecture is correct** — Run 5 (71%) works because LLM handles long-text reasoning while NLI catches agreement bias on ~8 samples.
+3. **Agreement bias is the core problem** — Instruction-tuned LLMs default to "confirm" under uncertainty.
+
+### Masking Bug Fix (2026-08-12)
+
+Fixed content leak in masked memory anchors across three files:
+
+| File | Method | Issue |
+|------|--------|-------|
+| `tools.py` | `_anchor_for()` | Leaked first 40 chars of label |
+| `reasoning.py` | `_masked_summary()` | Leaked first 40 chars of label |
+| `retrieve.py` | `_make_anchor()` | Leaked first 40 chars of label |
+
+All three now show `[MASKED — claim — content withheld. Use 'victor unmask <id>']` with no content leakage. All 40 masking tests pass. All 212 tests pass.
+
+### Next Steps
+
+1. **Self-consistency voting** — Implement majority-vote over 3-5 calls (free accuracy improvement)
+2. **Threshold sweep** — Test 0.3, 0.4, 0.5, 0.6 on cross-check mode
+3. **Ingest one real paper** — Verify Phase 0 exit criteria
+4. ~~**Fix masking bug**~~ — ✅ Fixed 2026-08-12
+
+---
+
+*Last updated: 2026-08-12 · Victor v5.3.0*

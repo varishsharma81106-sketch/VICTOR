@@ -512,16 +512,14 @@ class EvidenceWeighter:
         would indirectly disclose information about its content.
         """
         ntype = node_data.get("ntype", "claim")
-        label = (node_data.get("label") or "")[:40]
         epistemic = node_data.get("metadata", {}).get(
             "epistemic_status", "literature"
         )
         return ClaimEvidenceSummary(
             claim_id   = claim_id,
             claim_text = (
-                f"[MASKED — {ntype} '{label}"
-                f"{'...' if len(node_data.get('label') or '') > 40 else ''}'"
-                f" — content withheld. Use 'victor unmask {claim_id[:16]}' to reveal.]"
+                f"[MASKED — {ntype} — content withheld. "
+                f"Use 'victor unmask {claim_id[:16]}' to reveal.]"
             ),
             epistemic_status        = epistemic,
             confidence              = 0.0,

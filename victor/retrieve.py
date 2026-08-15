@@ -303,11 +303,10 @@ class HybridRetriever:
         content but still appear in the result list.
         """
         ntype = node_data.get("ntype", "node")
-        label = node_data.get("label", "")[:40]
         return RetrievedChunk(
             text=(
-                f"[MASKED — {ntype} '{label}{'...' if len(node_data.get('label','')) > 40 else ''}' "
-                f"— content withheld. Use 'victor unmask {node_id[:16]}' to reveal.]"
+                f"[MASKED — {ntype} — content withheld. "
+                f"Use 'victor unmask {node_id[:16]}' to reveal.]"
             ),
             source_id=node_id,
             source_type=node_data.get("ntype", NodeType.NOTE),

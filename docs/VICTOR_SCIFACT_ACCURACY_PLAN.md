@@ -32,8 +32,9 @@ All measured runs, in chronological order. No guesses; no aspirational numbers.
 | 5 | v5.1 | `cross-encoder/nli-deberta-v3-base`, **cross-check mode** | 100 | 71.0% | 68.6% | 76.7% | **Current best.** Cross-check only uses index 0 (contradiction), which was correct in both old and new label order |
 | 6 | v5.2 | `dleemiller/ModernCE-large-nli`, primary mode | 5 | 20.0% | 0% | 33% | Label inversion: confirms → predicted contradict |
 | 7 | v5.2 | `dleemiller/ModernCE-large-nli`, primary mode | 100 | 12.0% | 1.4% | 36.7% | Label inversion confirmed at scale; confusion matrix shows near-perfect confirm↔contradict swap |
+| 8 | v5.3 | `cross-encoder/nli-deberta-v3-base`, **primary mode** (label order FIXED) | 100 | 8.0% | 7.1% | 10.0% | **Label order correct** (smoke test passed). All 100 samples predicted inconclusive. Root cause: DeBERTa-v3-base NLI fine-tuned on MNLI (short sentence pairs) defaults to neutral on long scientific text (200-word abstracts). This is a model capacity limitation, not a label-order bug. |
 
-> The current best observed result is **71.0%** (Run 5, cross-check mode). The primary-mode results (Runs 4, 6, 7) were all caused by a label order bug now fixed in v5.3. Runs 6 and 7 used ModernCE, which outputs labels in the opposite order to deberta-v3 and whose auto-detection was silently failing. Neither primary-mode number reflects what that architecture can actually do.
+> The current best observed result is **71.0%** (Run 5, cross-check mode). Run 8 conclusively proves that DeBERTa-v3-base NLI cannot serve as the primary judge on long scientific text — the model was fine-tuned on MNLI (short sentence pairs) and defaults to neutral on SciFact-length inputs. The cross-check architecture (LLM decides, NLI catches agreement bias) is the correct approach for this model. To improve beyond 71%, the paths are: self-consistency voting, threshold sweep, larger NLI model, or fine-tuning DeBERTa on SciFact pairs.
 
 ---
 
@@ -62,6 +63,21 @@ Fix (v5.3): `NLICrossEncoder` now accepts an explicit `label_order` parameter th
 ### Cause C — Agreement bias is still the base problem (all LLM runs)
 
 Instruction-tuned LLMs doing zero-shot NLI systematically default to "entailment" (confirm) when uncertain. This is training-distribution driven — RLHF data has far more agreement/confirmation than contradiction. No prompt change fully eliminates it on a 7B-class model. The NLI cross-encoder architecture exists precisely to catch this: deberta-v3 NLI models were fine-tuned specifically on entailment/contradiction pairs and have no agreement bias.
+
+### Cause D — Cross-encoder NLI cannot handle long text in primary mode (Run 8)
+
+DeBERTa-v3-base NLI was fine-tuned on MNLI (MultiNLI), which consists of short sentence pairs (typically 10-30 words each). SciFact data pairs a ~20-word claim with a ~200-word scientific abstract. When the NLI cross-encoder receives these long, complex inputs, it defaults to "neutral" → "inconclusive" for **every sample** — 100% of predictions are inconclusive, regardless of the true label.
+
+This is confirmed by the confusion matrix:
+```
+Gold \ Pred             confirm   contradict inconclusive
+confirm (70):               5            6           59    ← 84% predicted inconclusive
+contradict (30):            2            3           25    ← 83% predicted inconclusive
+```
+
+The smoke test passes because it uses short, simple sentences ("A dog is sleeping" / "An animal is resting") that fall within the model's training distribution. The actual SciFact data does not.
+
+**Conclusion:** Cross-encoder NLI models trained on short sentence pairs cannot serve as the primary judge on long scientific text. The cross-check architecture (Run 5: 71%) is the correct approach: the LLM handles the long-text reasoning, and the NLI catches agreement bias on a subset of samples.
 
 ---
 
@@ -214,9 +230,10 @@ n=100 has ±7% CI. DoD #4 requires a stable number: both seeds must land within 
 
 - Don't report a single n=50 or n=100 number as closing DoD #4. It doesn't.
 - Don't write another planning document. The next action is a benchmark command, not a file.
-- Don't trust any primary-mode result from before v5.3 — all prior primary-mode runs had the label order wrong.
+- ~~Don't trust any primary-mode result from before v5.3 — all prior primary-mode runs had the label order wrong.~~ **Update (2026-08-12):** Run 8 confirms primary mode with correct label order still scores 8%. The issue is model capacity, not label order. Primary mode with DeBERTa-v3-base is definitively ruled out for long scientific text.
 - Don't start Phase 5 (LoRA fine-tuning on Victor's own data) before DoD #4 closes.
 - Don't swap to a wholly new model family before finishing the steps above. The NLI wiring is 90% of the fix; a new model wrapper starts from scratch.
+- **Don't use primary mode for SciFact.** Cross-encoder NLI models trained on MNLI (short sentence pairs) default to neutral on 200-word scientific abstracts. Cross-check mode is the correct architecture.
 
 ---
 

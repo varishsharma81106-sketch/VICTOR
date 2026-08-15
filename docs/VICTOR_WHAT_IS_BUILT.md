@@ -112,6 +112,9 @@ Was: averaged all numeric fields in a result dict together. Now: requires explic
 ### NLI label-order bug [FIXED in v5.2, smoke-tested in v5.3]
 Was: `_LABEL_ORDER = ["contradiction", "entailment", "neutral"]` — indices 1 and 2 were swapped for `cross-encoder/nli-deberta-v3-base`. Caused all entailment predictions to be mapped to "neutral" → "inconclusive", making primary mode fail (8% accuracy). Fixed to `["contradiction", "neutral", "entailment"]`.
 
+### Masking content leak [FIXED 2026-08-12]
+Was: `_anchor_for()` in `tools.py`, `_masked_summary()` in `reasoning.py`, and `_make_anchor()` in `retrieve.py` all leaked up to 40 characters of masked node labels in the anchor text. For example, a masked claim "This is SECRET research finding..." would show `[MASKED — claim 'This is SECRET research finding about quantum ent...' — content withheld]`. The test only checked that the FULL secret wasn't in the string, so it passed even with the truncated leak. Fixed by removing the truncated label from all three methods. Anchors now show `[MASKED — claim — content withheld. Use 'victor unmask <id>']` with no content leakage.
+
 > **Open question, flagged 2026-06-28, not yet resolved:** Hugging Face's own README for this model family documents `label_mapping = ['contradiction', 'entailment', 'neutral']` — the order this doc calls buggy. The order above was validated locally via the smoke test against known pairs, which is good evidence, but it directly contradicts the vendor README. Before relying on a primary-mode deberta-v3 run, print `model.config.id2label` directly and confirm which order the actual checkpoint reports — don't take either source on faith.
 
 Additionally, `dleemiller/ModernCE-large-nli` outputs labels in `["entailment", "neutral", "contradiction"]` order — the inverse of the fallback default. Auto-detection from `id2label` silently fails for this model (attribute path is different). v5.3 adds explicit `--nli-label-order` flag and a `validate_label_order()` smoke test that catches this before the benchmark loop starts. *(Note: this flag/method/param were confirmed local-only, not yet pushed, as of the last code review — push them so the next zip export actually contains them.)*
@@ -198,7 +201,8 @@ Do not run a 300-sample full dev set until one configuration clears ~83% on n=10
 | 2026-06-27 | SciFact Run 4 — v5.2, deberta-v3-base, NLI primary mode, n=100 | **8.0%** — NLI overrides fired: 100. Primary mode catastrophically broken. Root cause: `_LABEL_ORDER` was wrong (entailment/neutral indices swapped), causing every entailment pair to be classified as contradiction. Fixed in v5.2 (corrected order) and v5.3 (smoke test). |
 | 2026-06-27 | SciFact Run 5 — v5.2, deberta-v3-base, NLI cross-check mode, n=100 | **71.0%** — Best observed result. Cross-check only overrides LLM confirm→contradict, so label order bug at indices 1/2 didn't affect it (index 0 = contradiction was always correct). Still 14 points below DoD target. |
 | 2026-06-27 | v5.3 shipped | Added `label_order` constructor param to `NLICrossEncoder`. Added `validate_label_order()` smoke test. Added `--nli-label-order` and `--skip-nli-smoke-test` CLI flags. Auto-detection now tries 3 attribute paths. 196/196 tests pass. Primary mode with corrected label order not yet benchmarked. |
-| — | SciFact DoD #4 (>85%) | **Not yet closed.** Current best: 71.0%. Run deberta-base primary mode with v5.3 code next. |
+| 2026-08-12 | SciFact Run 6 — v5.3, deberta-v3-base, NLI primary mode (label order fixed), n=100 | **8.0%** — All 100 samples predicted "inconclusive" (neutral). Label order smoke test PASSED. Root cause: DeBERTa-v3-base NLI fine-tuned on MNLI (short sentence pairs) cannot handle long scientific text (200-word abstracts). Cross-encoder defaults to neutral on every input. Confirms cross-check architecture is the correct approach for this model. |
+| — | SciFact DoD #4 (>85%) | **Not yet closed.** Current best: 71.0% (cross-check mode). Primary mode conclusively ruled out for DeBERTa-v3-base on long text. Next: self-consistency voting, threshold sweep, or fine-tuning. |
 
 ---
 
@@ -212,4 +216,4 @@ Do not run a 300-sample full dev set until one configuration clears ~83% on n=10
 | June 2026 | v5.2 | _LABEL_ORDER corrected for deberta-v3-base. Auto-detection via id2label added. SciFact Runs 3–5 completed. |
 | June 2026 | v5.3 | label_order constructor param. validate_label_order() smoke test. --nli-label-order / --skip-nli-smoke-test CLI flags. 3-path auto-detection. Known model label orders documented. |
 
-*VICTOR_WHAT_IS_BUILT.md · v5.3 · June 2026*
+*VICTOR_WHAT_IS_BUILT.md · v5.3 · Updated 2026-08-12*

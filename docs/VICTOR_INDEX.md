@@ -1,5 +1,5 @@
 # VICTOR — Document Index
-*Last updated: 2026-06-28 · Code version: v5.3.0*
+*Last updated: 2026-08-12 · Code version: v5.3.0*
 
 ---
 
@@ -27,6 +27,7 @@ All living documents are in the `docs/` directory. The canonical location for ev
 | [`VICTOR_SCIFACT_ACCURACY_PLAN.md`](VICTOR_SCIFACT_ACCURACY_PLAN.md) | Benchmark history, root cause diagnosis, ordered checklist to close DoD #4. | Philosophy, hardware |
 | [`VICTOR_STRATEGY.md`](VICTOR_STRATEGY.md) | Competitive landscape, MCP server plan, startup viability, roadmap. | Code state, philosophy |
 | [`PROJECT_UPDATES.md`](PROJECT_UPDATES.md) | Today's changes, future recommendations, known issues. | Long-term vision |
+| [`VICTOR_STATUS_2026-08-12.md`](VICTOR_STATUS_2026-08-12.md) | **Current session status.** AAAI submission status, benchmark history, codebase state, immediate next steps. **Read this for a quick overview.** | Long-term philosophy |
 
 ---
 

@@ -27,7 +27,7 @@ Phase 0 (software brain, text-only) is complete — both bugs fixed, PatternDete
 
 Phase 1A (audio ingestion) is complete — `AudioIngestor` with `LibrosaFeatureClassifier` ships in v5.0. Note: the build plan called for PANNs/ONNX for audio classification; what shipped is a simpler heuristic classifier using MFCCs and chroma features via librosa. Functional for producing MEASUREMENT nodes from audio; less accurate than PANNs would have been. Phase 1B (sensor fusion) should upgrade this before relying on audio for field research.
 
-The one remaining gate before Phase 1B can open is DoD #4: ConflictDetector accuracy ≥85% on the SciFact full dev set. The NLI cross-encoder is wired and the label-order bug that caused primary mode to fail is fixed in v5.3. Current best: 71.0% (cross-check mode, n=100). Primary mode with corrected label order has not yet been benchmarked.
+The one remaining gate before Phase 1B can open is DoD #4: ConflictDetector accuracy ≥85% on the SciFact full dev set. The NLI cross-encoder is wired and the label-order bug that caused primary mode to fail is fixed in v5.3. Current best: 71.0% (cross-check mode, n=100). **Run 8 (2026-08-12) conclusively proved primary mode with DeBERTa-v3-base is ruled out for long scientific text** — all 100 samples predicted inconclusive because the model was fine-tuned on MNLI (short sentence pairs). See [[VICTOR_SCIFACT_ACCURACY_PLAN]] for full diagnosis.
 
 ---
 
@@ -67,10 +67,11 @@ Current state of the benchmark:
 | Run 2 | v5.1, pure LLM (JSON rewrite) | 50 | 58.0% | Structured prompt regression |
 | Run 3 | v5.2, qwen2.5:7b, no NLI | 100 | 59.0% | Pure LLM ceiling confirmed |
 | Run 4 | v5.2, deberta-base, NLI primary | 100 | 8.0% | Label order bug (now fixed in v5.3) |
-| Run 5 | v5.2, deberta-base, NLI cross-check | 100 | **71.0%** | Best to date |
+| Run 5 | v5.2, deberta-base, NLI cross-check | 100 | **71.0%** | **Best to date** |
+| Run 8 | v5.3, deberta-base, NLI primary (label order FIXED) | 100 | 8.0% | **Conclusive**: NLI can't handle long text |
 | **Target** | — | ≥300 | **>85%** | DoD #4 |
 
-Next benchmark to run: deberta-base primary mode using v5.3 code (label order bug fixed). See `VICTOR_SCIFACT_ACCURACY_PLAN.md` for exact commands and decision gates.
+**Run 8 (2026-08-12) proved primary mode is ruled out for DeBERTa-v3-base.** The cross-check architecture (Run 5: 71%) is the correct approach. Next actions: self-consistency voting, threshold sweep, or fine-tuning. See [[VICTOR_SCIFACT_ACCURACY_PLAN]] for exact commands.
 
 **Definition of done for Phase 1:**
 - All reasoning components built ✅

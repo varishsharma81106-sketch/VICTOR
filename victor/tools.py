@@ -186,15 +186,13 @@ class _ToolImplementations:
 
     def _anchor_for(self, node_id: str, node_data: Dict[str, Any]) -> Dict[str, Any]:
         ntype = node_data.get("ntype", "node")
-        label = (node_data.get("label") or "")[:40]
         return {
             "node_id":   node_id,
             "type":      ntype,
             "is_masked": True,
             "message": (
-                f"[MASKED — {ntype} '{label}"
-                f"{'...' if len(node_data.get('label') or '') > 40 else ''}' "
-                f"— content withheld. Use 'victor unmask {node_id[:16]}' to reveal.]"
+                f"[MASKED — {ntype} — content withheld. "
+                f"Use 'victor unmask {node_id[:16]}' to reveal.]"
             ),
         }
 
