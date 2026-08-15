@@ -128,7 +128,7 @@ The most important unresolved question about Victor isn't the SciFact number —
 | 6 | Default embedding model is nomic-embed-text with offline fallback preserved | ✅ | Confirmed: `embedder.py` fallback chain real and offline-capable |
 | 7 | IngestorBase exists — new document types require only subclassing it | ✅ | Inherited from v3.5, not contradicted |
 | 8 | At least one computation kernel (StatisticsKernel) exists and is callable from `core.py` | ✅ | Inherited from v3.5, not contradicted |
-| 9 | A test suite exists and passes on a clean clone | ✅ | **Actually run this time:** 196/196 passed via `pytest`, not just grep-counted |
+| 9 | A test suite exists and passes on a clean clone | ✅ | **Actually run this time:** 212/212 passed via `pytest`, not just grep-counted |
 | 10 | examples/, LICENSE, .gitignore, and a minimal CI check exist in the repo | ✅ | LICENSE confirmed proprietary, contact details now filled in (no more placeholder); .gitignore present |
 
 **Criterion #4 remains the only open gate.**
@@ -160,7 +160,7 @@ The most important unresolved question about Victor isn't the SciFact number —
 | A code snapshot lagging the developer's real local state gets misread as "fabricated" | High | **This is what actually happened with the 71% figure in the prior version of this file — corrected above.** Mitigation: phrase gaps as "not found in this snapshot," not "isn't real," and push local-only changes before the next handoff. |
 | n=100 sample benchmark has a wide confidence interval | Medium | Open — Section 4 requires a full 300-sample, two-seed run before DoD #4 closes, even after a good next-step result |
 | Hardware certification (ATEX, procurement) is regulatory and capital-intensive | High | Unchanged — not a software problem, not solvable solo |
-| A green test suite read as "the product works" | Low | Largely resolved this round — 196/196 actually run via pytest, not estimated. Chunker/extractor test gap still named explicitly. |
+| A green test suite read as "the product works" | Low | Largely resolved this round — 212/212 actually run via pytest, not estimated. Chunker/extractor test gap still named explicitly. |
 | Version number inconsistency (`5.2.0` vs `v5_3`) | Resolved | `setup.py` bumped to `5.3.0`, matches doc set and zip naming now. |
 | NLI label order for `deberta-v3-*` may not match the model's official README convention | Medium, new | See Section 4.1's open question — flagged, not yet independently reconciled against `config.json::id2label`. |
 | Documentation describing a fixed version of a problem that the actual code shows is still open, or vice versa | High, recurring | Still the single most repeated failure mode across this project's history. Standing mitigation: check the code (and now, also check with the developer directly when a snapshot and a stated result disagree) before writing the next doc. |

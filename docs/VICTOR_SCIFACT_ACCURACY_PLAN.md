@@ -1,8 +1,10 @@
 # VICTOR — SciFact Accuracy: Diagnosis & Action Plan
-*Working document · v5.3 · June 2026*
+*Working document · v5.3 · Updated 2026-08-12*
 *Supersedes all prior versions of this file. Update in place; do not create new versions per run.*
 
 > **Current state in one line:** Environment works. Benchmark runs. Best observed: **71.0%** (deberta-v3-base, cross-check, n=100). The label order inversion bug that caused primary mode to score 8–12% is diagnosed and fixed in v5.3. The remaining gap to ≥85% is accuracy, not setup.
+
+> **Update (2026-08-12):** Research findings confirm 71% is competitive (MultiVerS SOTA is 72-73%), SciClaims hit 88% with fine-tuned DeBERTa, and self-consistency voting requires temperature variation to work. See Section 9 for details.
 
 ---
 
@@ -97,7 +99,7 @@ The smoke test passes because it uses short, simple sentences ("A dog is sleepin
 ## 5. Action plan — ordered by effort, with decision gates
 
 ### ✅ DONE — Wire NLI into benchmark script (Step 1, original plan)
-`scifact_benchmark.py` now accepts `--nli-model`, `--nli-threshold`, `--nli-primary`. `NLICrossEncoder` is wired into `ConflictDetector` at both construction sites. NLI override counts are tracked and reported. Tests: 196/196 passing.
+`scifact_benchmark.py` now accepts `--nli-model`, `--nli-threshold`, `--nli-primary`. `NLICrossEncoder` is wired into `ConflictDetector` at both construction sites. NLI override counts are tracked and reported. Tests: 212/212 passing.
 
 ### ✅ DONE — Fix label order bug and add smoke test (v5.2 + v5.3)
 `_LABEL_ORDER` corrected for deberta-v3. Auto-detection added (multi-path). `label_order` constructor param added. `validate_label_order()` smoke test added. `--nli-label-order` CLI flag added.
@@ -259,3 +261,61 @@ Contradiction pair: "The sky is blue."   / "The sky is green."       → expecte
 If either fails, the benchmark aborts with a clear error message and the correct label orders for common models. Pass `--skip-nli-smoke-test` only if you've already validated the mapping externally.
 
 *Update this file's run table in place as new runs complete. One row per run, exact model tag, exact n, exact mode, exact date.*
+
+---
+
+## 9. Research Findings (2026-08-12)
+
+### 9.1 — Victor's 71% is competitive, not mediocre
+
+| System | Accuracy | Notes |
+|--------|----------|-------|
+| **Victor (cross-check)** | **71.0%** | Zero-shot, general LLM + off-the-shelf NLI |
+| MultiVerS (SOTA) | 72-73% | Purpose-built, fine-tuned on SciFact, Longformer backbone |
+| SciClaims | 88% | Fine-tuned DeBERTa on SciFact training set |
+
+Victor's 71% using Qwen2.5-7B + DeBERTa-v3-base with zero SciFact-specific training is genuinely close to a dedicated, fine-tuned SOTA system (MultiVerS at 72-73%). This is not a mediocre result — it's a strong zero-shot baseline.
+
+### 9.2 — SciClaims validates the fine-tuning path
+
+**SciClaims** fine-tuned DeBERTa on a SciFact-derived training set and hit **88% F1**. This directly validates the accuracy plan's Step 5 (fine-tune DeBERTa on `claims_train.jsonl`, target 88–92%) as realistic. Someone has already done almost exactly that and cleared 85%.
+
+**Key insight:** The training data is already present locally: `data/claims_train.jsonl` (809 labeled claims). No GPU required for CPU fine-tuning (slower but feasible).
+
+### 9.3 — Longformer-based NLI is a known fix for long text
+
+Run 8 proved DeBERTa-v3-base fails on long text (all 100 samples predicted inconclusive). The standard fix in the field is swapping to a **Longformer-based NLI architecture** — linear-complexity attention built for passage-length premise + short hypothesis. MultiVerS uses a Longformer backbone for exactly this reason.
+
+**New option not in original accuracy plan:** Consider a Longformer-based NLI checkpoint as primary judge on long text, either instead of or before fine-tuning DeBERTa.
+
+### 9.4 — Self-consistency voting needs temperature variation
+
+The original plan listed self-consistency voting as priority #1 (free +3-5%). However, a 2026 study found that **increasing ensemble size from 1 to 7 produced no significant accuracy gain** unless paired with actual temperature diversification — deterministic repeated calls just repeat the same failure mode.
+
+**Fix:** If implementing self-consistency voting, explicitly raise temperature (e.g., 0.7–0.9) across the 3–5 votes. Naive repetition at temperature 0 won't help.
+
+### 9.5 — MCP memory landscape is more crowded
+
+By July 2026, MCP memory-server directories show a more crowded field. Several now advertise redaction-style features. Victor's "nobody else has masked memory" claim is getting less unique as a bare claim.
+
+**What's still unique:** The **combination** of:
+1. Epistemic-status tiers (MEASUREMENT > EXPERIMENT > LITERATURE > NOTE > HYPOTHESIS)
+2. Tamper-evident mask/unmask audit log
+3. Graph-structure-live-content-hidden
+4. Applied specifically to scientific claim provenance
+
+**Messaging shift:** From "nobody has masking" to "nobody has this combination for scientific evidence provenance" — more defensible and more true.
+
+### 9.6 — Updated priority list
+
+| Priority | Action | Expected Impact | Notes |
+|----------|--------|-----------------|-------|
+| 1 | Threshold sweep (0.3-0.6) | +1-3% | Free, 30 min |
+| 2 | Self-consistency voting (with temp variation) | +3-5% | Free, but must vary temperature |
+| 3 | Fine-tune DeBERTa on SciFact (CPU OK) | Could reach 85%+ | Validated by SciClaims (88%) |
+| 4 | Longformer-based NLI | Could reach 85%+ | Alternative to fine-tuning |
+| 5 | DeBERTa-v3-large cross-check | +2-3% | 3x slower, same interface |
+
+---
+
+*Research findings added 2026-08-12. Sources: MultiVerS paper, SciClaims paper, 2026 ensemble study.*

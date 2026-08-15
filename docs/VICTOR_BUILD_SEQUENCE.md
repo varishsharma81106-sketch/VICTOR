@@ -23,7 +23,7 @@ If no: do not build it. If yes: find where it fits in the sequence below and bui
 
 **Phase 0 complete. Phase 1A complete. YOU ARE HERE: Closing DoD #4 (SciFact benchmark ≥85%).**
 
-Phase 0 (software brain, text-only) is complete — both bugs fixed, PatternDetector wired, full test suite passing (196/196).
+Phase 0 (software brain, text-only) is complete — both bugs fixed, PatternDetector wired, full test suite passing (212/212).
 
 Phase 1A (audio ingestion) is complete — `AudioIngestor` with `LibrosaFeatureClassifier` ships in v5.0. Note: the build plan called for PANNs/ONNX for audio classification; what shipped is a simpler heuristic classifier using MFCCs and chroma features via librosa. Functional for producing MEASUREMENT nodes from audio; less accurate than PANNs would have been. Phase 1B (sensor fusion) should upgrade this before relying on audio for field research.
 

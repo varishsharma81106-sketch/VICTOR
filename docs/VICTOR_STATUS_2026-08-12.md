@@ -69,7 +69,7 @@
 | Metric | Value |
 |--------|-------|
 | Version | v5.3.0 |
-| Tests | 196/196 passing |
+| Tests | 212/212 passing |
 | Test files | 12 |
 | Python | 3.14 (alpha) |
 | LLM | Qwen2.5-7B (Ollama) |
@@ -96,7 +96,7 @@
 
 ### Known Issues
 
-1. **`find_gaps()` leaks masked content** — Masking gate not propagated to `reasoning.py` `find_gaps()`. Blocks MCP server.
+1. ~~**`find_gaps()` leaks masked content**~~ — ✅ Fixed 2026-08-12. Removed 40-char label leak from all anchor methods.
 2. **Primary mode fails on long text** — DeBERTa-v3-base NLI defaults to neutral on 200-word abstracts.
 3. **No real research data ingested** — Phase 0 exit criteria require `victor gaps` on at least one real document.
 4. **Paper files untracked** — `paper/`, `paper 22july/`, `victor_aaai27.pdf` not in git.

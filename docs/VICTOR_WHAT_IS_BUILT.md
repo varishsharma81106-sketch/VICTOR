@@ -10,7 +10,7 @@
 
 ## The One-Line State
 
-Phase 0 and Phase 1 are complete. 196/196 tests pass (re-verified via actual `pytest` run, not estimated). The NLI cross-encoder is wired, label-order corrected, and smoke-tested locally (push pending — see Known Bugs). Best SciFact accuracy so far: **71.0%** (cross-check mode, n=100). DoD criterion #4 (>85%) is still open. No real research data has been ingested.
+Phase 0 and Phase 1 are complete. 212/212 tests pass (re-verified via actual `pytest` run, not estimated). The NLI cross-encoder is wired, label-order corrected, and smoke-tested locally (push pending — see Known Bugs). Best SciFact accuracy so far: **71.0%** (cross-check mode, n=100). DoD criterion #4 (>85%) is still open. No real research data has been ingested.
 
 <!-- CURRENT_TEST_COUNT -->196<!-- /CURRENT_TEST_COUNT -->
 
@@ -201,6 +201,7 @@ Do not run a 300-sample full dev set until one configuration clears ~83% on n=10
 | 2026-06-27 | SciFact Run 4 — v5.2, deberta-v3-base, NLI primary mode, n=100 | **8.0%** — NLI overrides fired: 100. Primary mode catastrophically broken. Root cause: `_LABEL_ORDER` was wrong (entailment/neutral indices swapped), causing every entailment pair to be classified as contradiction. Fixed in v5.2 (corrected order) and v5.3 (smoke test). |
 | 2026-06-27 | SciFact Run 5 — v5.2, deberta-v3-base, NLI cross-check mode, n=100 | **71.0%** — Best observed result. Cross-check only overrides LLM confirm→contradict, so label order bug at indices 1/2 didn't affect it (index 0 = contradiction was always correct). Still 14 points below DoD target. |
 | 2026-06-27 | v5.3 shipped | Added `label_order` constructor param to `NLICrossEncoder`. Added `validate_label_order()` smoke test. Added `--nli-label-order` and `--skip-nli-smoke-test` CLI flags. Auto-detection now tries 3 attribute paths. 196/196 tests pass. Primary mode with corrected label order not yet benchmarked. |
+| 2026-08-12 | Masking leak fixed | Removed 40-char label leak from `tools.py`, `reasoning.py`, `retrieve.py`. Anchors now show `[MASKED — claim — content withheld]` with no content leakage. 212/212 tests pass. |
 | 2026-08-12 | SciFact Run 6 — v5.3, deberta-v3-base, NLI primary mode (label order fixed), n=100 | **8.0%** — All 100 samples predicted "inconclusive" (neutral). Label order smoke test PASSED. Root cause: DeBERTa-v3-base NLI fine-tuned on MNLI (short sentence pairs) cannot handle long scientific text (200-word abstracts). Cross-encoder defaults to neutral on every input. Confirms cross-check architecture is the correct approach for this model. |
 | — | SciFact DoD #4 (>85%) | **Not yet closed.** Current best: 71.0% (cross-check mode). Primary mode conclusively ruled out for DeBERTa-v3-base on long text. Next: self-consistency voting, threshold sweep, or fine-tuning. |
 
