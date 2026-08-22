@@ -480,8 +480,9 @@ def patterns(ctx):
 
     console.print("\n[bold]Top queried sources:[/bold]")
     if result["top_queried_sources"]:
-        for title, count in result["top_queried_sources"]:
-            console.print(f"  {count:>3}  {title}")
+        # Items are dicts {source_id, count, label} from PatternDetector.analyze()
+        for src in result["top_queried_sources"]:
+            console.print(f"  {src['count']:>3}  {src['label']}")
     else:
         console.print("  [dim](none yet)[/dim]")
 

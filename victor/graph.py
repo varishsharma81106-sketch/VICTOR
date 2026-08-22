@@ -605,14 +605,21 @@ class VictorKnowledgeGraph:
         """
         Called whenever a node contributes to a retrieval result.
         - Increments importance_score by 0.05 (capped at 1.0)
+        - Increments retrieval_count by 1 (uncapped, never decays)
         - Updates last_retrieved_at to now
+
+        retrieval_count is deliberately separate from importance_score:
+        importance is capped at 1.0 and decays over time (apply_temporal_decay),
+        so it cannot answer "which sources do I consult most often?".
+        PatternDetector.top_queried_sources reads this raw tally.
         """
         node = self._g.nodes.get(node_id)
         if node is None:
             return
         meta = node.get("metadata", {})
         current = meta.get("importance_score", _DEFAULT_IMPORTANCE.get(node.get("ntype", ""), 0.5))
-        meta["importance_score"] = min(1.0, current + 0.05)
+        meta["importance_score"]  = min(1.0, current + 0.05)
+        meta["retrieval_count"]   = meta.get("retrieval_count", 0) + 1
         meta["last_retrieved_at"] = datetime.now(timezone.utc).isoformat()
 
     def apply_temporal_decay(

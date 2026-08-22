@@ -72,8 +72,13 @@ class InferenceClient(ABC):
     """
 
     @abstractmethod
-    def generate(self, prompt: str) -> LLMResult:
-        """Generate text. Must never raise — always return an LLMResult."""
+    def generate(self, prompt: str, temperature: Optional[float] = None) -> LLMResult:
+        """Generate text. Must never raise — always return an LLMResult.
+
+        temperature=None means "use the backend's configured default".
+        Pass an explicit value to vary sampling for one call, which is what
+        self-consistency voting needs in order to produce differing samples.
+        """
         ...
 
     @abstractmethod
@@ -83,6 +88,7 @@ class InferenceClient(ABC):
         schema_hint: Optional[Dict[str, Any]] = None,
         retries: int = 1,
         response_schema: Optional[Dict[str, Any]] = None,
+        temperature: Optional[float] = None,
     ) -> LLMResult:
         ...
 
@@ -116,6 +122,7 @@ class OllamaClient(InferenceClient):
         use_mock:       bool = False,
         timeout:        int  = 60,
         log_file:       Optional[Path] = None,
+        temperature:    float = 0.1,
     ):
         self.base_url       = base_url.rstrip("/")
         self.model          = model
@@ -124,24 +131,27 @@ class OllamaClient(InferenceClient):
         self.use_mock       = use_mock
         self.timeout        = timeout
         self.log_file       = Path(log_file) if log_file else None
+        self.temperature    = temperature
 
-    def generate(self, prompt: str) -> LLMResult:
+    def generate(self, prompt: str, temperature: Optional[float] = None) -> LLMResult:
         """
         Generate text. Tries Ollama → OpenAI → Mock.
         Never raises — always returns an LLMResult.
+
+        temperature=None uses self.temperature (from VictorConfig.llm_temperature).
         """
         if self.use_mock:
             return self._mock(prompt)
 
         try:
-            result = self._ollama(prompt)
+            result = self._ollama(prompt, temperature=temperature)
             self._log(result, prompt)
             return result
         except Exception:
             pass
 
         try:
-            result = self._openai(prompt)
+            result = self._openai(prompt, temperature=temperature)
             self._log(result, prompt)
             return result
         except Exception:
@@ -159,6 +169,7 @@ class OllamaClient(InferenceClient):
         schema_hint: Optional[Dict[str, Any]] = None,
         retries: int = 1,
         response_schema: Optional[Dict[str, Any]] = None,
+        temperature: Optional[float] = None,
     ) -> LLMResult:
         """
         Generate with a strong preference for valid JSON output.
@@ -193,18 +204,22 @@ class OllamaClient(InferenceClient):
                 # Route directly to _ollama with grammar schema; fall through to
                 # _openai / _mock on failure just like the normal generate() chain.
                 try:
-                    result = self._ollama(enhanced_prompt, response_schema=response_schema)
+                    result = self._ollama(
+                        enhanced_prompt,
+                        response_schema=response_schema,
+                        temperature=temperature,
+                    )
                     self._log(result, enhanced_prompt)
                 except Exception:
                     try:
-                        result = self._openai(enhanced_prompt)
+                        result = self._openai(enhanced_prompt, temperature=temperature)
                         self._log(result, enhanced_prompt)
                     except Exception:
                         result = self._mock(enhanced_prompt)
                         self._log(result, enhanced_prompt)
             else:
                 # use_mock=True, or no response_schema — use standard generate() chain.
-                result = self.generate(enhanced_prompt)
+                result = self.generate(enhanced_prompt, temperature=temperature)
             last_result = result
 
             # Validate JSON
@@ -240,6 +255,7 @@ class OllamaClient(InferenceClient):
         prompt: str,
         tool_descriptions: str,
         max_tokens: Optional[int] = None,
+        temperature: Optional[float] = None,
     ) -> LLMResult:
         """
         Convenience wrapper for tool-calling agent loops.
@@ -260,6 +276,7 @@ class OllamaClient(InferenceClient):
             full_prompt,
             response_schema=AGENT_ACTION_SCHEMA,
             retries=1,
+            temperature=temperature,
         )
 
     def is_available(self) -> bool:
@@ -277,7 +294,12 @@ class OllamaClient(InferenceClient):
 
     # ── Providers ─────────────────────────────────────────────────────────────
 
-    def _ollama(self, prompt: str, response_schema: Optional[Dict[str, Any]] = None) -> LLMResult:
+    def _ollama(
+        self,
+        prompt: str,
+        response_schema: Optional[Dict[str, Any]] = None,
+        temperature: Optional[float] = None,
+    ) -> LLMResult:
         import urllib.request
 
         t0   = time.time()
@@ -285,6 +307,12 @@ class OllamaClient(InferenceClient):
             "model":  self.model,
             "prompt": prompt,
             "stream": False,
+            # Without this key Ollama applies its own server-side default (0.8).
+            # Victor's judgments are classification, not creative writing, so the
+            # sampling temperature must be Victor's decision, not the daemon's.
+            "options": {
+                "temperature": self.temperature if temperature is None else temperature,
+            },
         }
         if response_schema:
             # Ollama v0.5+ converts this JSON schema to a GBNF grammar internally.
@@ -310,7 +338,7 @@ class OllamaClient(InferenceClient):
             latency_s=round(time.time() - t0, 2),
         )
 
-    def _openai(self, prompt: str) -> LLMResult:
+    def _openai(self, prompt: str, temperature: Optional[float] = None) -> LLMResult:
         import urllib.request
 
         api_key = os.environ.get("OPENAI_API_KEY", "")
@@ -321,7 +349,10 @@ class OllamaClient(InferenceClient):
         payload = json.dumps({
             "model": self.openai_model,
             "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0.1,
+            # Was hardcoded to 0.1, which made per-call sampling diversity
+            # impossible on this backend — self-consistency voting degenerated
+            # into N identical votes.
+            "temperature": self.temperature if temperature is None else temperature,
         }).encode()
 
         req = urllib.request.Request(
@@ -403,11 +434,13 @@ class LlamaCppClient(InferenceClient):
         n_ctx:      int = 4096,
         n_threads:  Optional[int] = None,
         log_file:   Optional[Path] = None,
+        temperature: float = 0.1,
     ):
         self.model_path = model_path
         self.n_ctx       = n_ctx
         self.n_threads   = n_threads
         self.log_file    = Path(log_file) if log_file else None
+        self.temperature = temperature
         self._llm        = None
 
     def _load(self):
@@ -428,11 +461,16 @@ class LlamaCppClient(InferenceClient):
         except ImportError:
             return False
 
-    def generate(self, prompt: str) -> LLMResult:
+    def generate(self, prompt: str, temperature: Optional[float] = None) -> LLMResult:
         t0 = time.time()
         try:
             self._load()
-            out = self._llm(prompt, max_tokens=1024, stop=["</s>"])
+            out = self._llm(
+                prompt,
+                max_tokens=1024,
+                stop=["</s>"],
+                temperature=self.temperature if temperature is None else temperature,
+            )
             text = out["choices"][0]["text"]
             result = LLMResult(
                 text=text, provider="llama_cpp",
@@ -450,6 +488,7 @@ class LlamaCppClient(InferenceClient):
     def generate_structured(
         self, prompt: str, schema_hint: Optional[Dict[str, Any]] = None,
         retries: int = 1, response_schema: Optional[Dict[str, Any]] = None,
+        temperature: Optional[float] = None,
     ) -> LLMResult:
         # llama_cpp grammar support (GBNF) exists but is a separate code path
         # (LlamaGrammar.from_json_schema) — kept simple here via prompt coercion,
@@ -460,18 +499,23 @@ class LlamaCppClient(InferenceClient):
             enhanced = (
                 f"{prompt}\n\nRespond ONLY with JSON matching: {json.dumps(schema)}"
             )
-        result = self.generate(enhanced)
+        result = self.generate(enhanced, temperature=temperature)
         for attempt in range(retries):
             try:
                 json.loads(result.text.strip())
                 return result
             except (json.JSONDecodeError, TypeError):
-                result = self.generate(enhanced + "\n\nIMPORTANT: respond with ONLY valid JSON.")
+                result = self.generate(
+                    enhanced + "\n\nIMPORTANT: respond with ONLY valid JSON.",
+                    temperature=temperature,
+                )
         return result
 
-    def generate_with_tools(self, prompt: str, tool_descriptions: str, max_tokens=None) -> LLMResult:
+    def generate_with_tools(self, prompt: str, tool_descriptions: str, max_tokens=None,
+                            temperature: Optional[float] = None) -> LLMResult:
         full_prompt = f"You have access to the following tools:\n{tool_descriptions}\n\n{prompt}"
-        return self.generate_structured(full_prompt, response_schema=AGENT_ACTION_SCHEMA, retries=1)
+        return self.generate_structured(full_prompt, response_schema=AGENT_ACTION_SCHEMA,
+                                        retries=1, temperature=temperature)
 
     def _log(self, result: LLMResult, prompt: str) -> None:
         if not self.log_file:
@@ -516,7 +560,10 @@ class MLXClient(InferenceClient):
         except ImportError:
             return False
 
-    def generate(self, prompt: str) -> LLMResult:
+    def generate(self, prompt: str, temperature: Optional[float] = None) -> LLMResult:
+        # temperature is accepted for interface parity but not applied: mlx_lm
+        # takes sampling settings via a sampler object, not a scalar kwarg.
+        # Wiring that up is a separate change — flagged rather than faked.
         t0 = time.time()
         try:
             from mlx_lm import generate as mlx_generate
@@ -536,23 +583,29 @@ class MLXClient(InferenceClient):
     def generate_structured(
         self, prompt: str, schema_hint: Optional[Dict[str, Any]] = None,
         retries: int = 1, response_schema: Optional[Dict[str, Any]] = None,
+        temperature: Optional[float] = None,
     ) -> LLMResult:
         schema = response_schema or schema_hint
         enhanced = prompt
         if schema:
             enhanced = f"{prompt}\n\nRespond ONLY with JSON matching: {json.dumps(schema)}"
-        result = self.generate(enhanced)
+        result = self.generate(enhanced, temperature=temperature)
         for attempt in range(retries):
             try:
                 json.loads(result.text.strip())
                 return result
             except (json.JSONDecodeError, TypeError):
-                result = self.generate(enhanced + "\n\nIMPORTANT: respond with ONLY valid JSON.")
+                result = self.generate(
+                    enhanced + "\n\nIMPORTANT: respond with ONLY valid JSON.",
+                    temperature=temperature,
+                )
         return result
 
-    def generate_with_tools(self, prompt: str, tool_descriptions: str, max_tokens=None) -> LLMResult:
+    def generate_with_tools(self, prompt: str, tool_descriptions: str, max_tokens=None,
+                            temperature: Optional[float] = None) -> LLMResult:
         full_prompt = f"You have access to the following tools:\n{tool_descriptions}\n\n{prompt}"
-        return self.generate_structured(full_prompt, response_schema=AGENT_ACTION_SCHEMA, retries=1)
+        return self.generate_structured(full_prompt, response_schema=AGENT_ACTION_SCHEMA,
+                                        retries=1, temperature=temperature)
 
     def _log(self, result: LLMResult, prompt: str) -> None:
         if not self.log_file:
@@ -576,12 +629,14 @@ def create_inference_client(config) -> InferenceClient:
     This is what core.py calls instead of naming OllamaClient directly,
     completing DoD item #5 (provider-agnostic InferenceClient).
     """
-    backend = getattr(config, "inference_backend", "ollama")
+    backend     = getattr(config, "inference_backend", "ollama")
+    temperature = getattr(config, "llm_temperature", 0.1)
 
     if backend == "llama_cpp":
         return LlamaCppClient(
             model_path=getattr(config, "llama_cpp_model_path", ""),
             log_file=config.llm_log_file,
+            temperature=temperature,
         )
     if backend == "mlx":
         return MLXClient(
@@ -597,4 +652,5 @@ def create_inference_client(config) -> InferenceClient:
         use_mock       = config.use_mock_llm,
         timeout        = config.llm_timeout,
         log_file       = config.llm_log_file,
+        temperature    = temperature,
     )

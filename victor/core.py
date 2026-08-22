@@ -458,13 +458,16 @@ class Victor:
             "suggestions": result["suggested_experiments"][:5],
         }
 
-        # Add recurring weak topics (sources queried often with weak evidence)
+        # Add recurring weak topics (sources queried often with weak evidence).
+        # top_queried_sources items are dicts {source_id, count, label} — see
+        # PatternDetector.analyze(). This used to unpack them as 2-tuples, which
+        # only went unnoticed because the list was always empty.
         weak_topics = []
-        for title, count in result["top_queried_sources"]:
-            if count >= 3:
+        for src in result["top_queried_sources"]:
+            if src["count"] >= 3:
                 weak_topics.append({
-                    "topic": title,
-                    "query_count": count,
+                    "topic": src["label"],
+                    "query_count": src["count"],
                     "note": "Frequently queried — check if evidence is strong enough",
                 })
         digest["recurring_weak_topics"] = weak_topics[:5]

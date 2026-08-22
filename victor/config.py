@@ -79,6 +79,15 @@ class VictorConfig:
     use_mock_embedder: bool = False   # skip HuggingFace load in tests/offline envs
     llm_timeout:     int  = 60
 
+    # Sampling temperature for every LLM call that doesn't override it.
+    # Previously unset on the Ollama path, which meant Victor silently inherited
+    # Ollama's server default of 0.8 — far too hot for the three-way
+    # confirm/contradict/inconclusive judgment ConflictDetector makes, while the
+    # OpenAI path was hardcoded to 0.1. Judgments now default to near-greedy on
+    # both backends; callers that genuinely want sampling diversity (e.g.
+    # self-consistency voting) pass temperature= explicitly per call.
+    llm_temperature: float = 0.1
+
     # ── Agent loop budget (read by AgenticRetriever via getattr) ──────────────
     agent_max_tool_calls:     int = 5
     agent_max_context_tokens: int = 8000

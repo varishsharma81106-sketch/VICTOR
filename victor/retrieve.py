@@ -42,6 +42,16 @@ def _estimate_tokens(text: str) -> int:
     return int(len(text.split()) * 1.3)
 
 
+def _ep_badge(chunk: RetrievedChunk) -> str:
+    """
+    Render the epistemic-status badge for one context line.
+
+    Tolerates a missing status rather than raising. The badge is cosmetic;
+    a chunk without a tier must never be able to break answer assembly.
+    """
+    return f"[{(chunk.epistemic_status or 'unknown').upper()}]"
+
+
 ANSWER_PROMPT = """\
 You are a research assistant with access to a curated knowledge base.
 Answer the question using ONLY the context provided below.
@@ -215,7 +225,7 @@ class HybridRetriever:
 
         context_parts = []
         for i, c in enumerate(chunks, 1):
-            ep_badge = f"[{c.epistemic_status.upper()}]"
+            ep_badge = _ep_badge(c)
             context_parts.append(
                 f"[{i}] {ep_badge} ({c.source_type}) {c.source_title} (score={c.score:.2f})\n{c.text}"
             )
@@ -314,7 +324,12 @@ class HybridRetriever:
             chunk_index=0,
             score=max(blended_score * 0.05, 0.001),
             provenance=[f"masked anchor · node {node_id[:20]}"],
-            epistemic_status=None,
+            # "masked", not None. RetrievedChunk.epistemic_status is typed str with a
+            # safe default; passing None explicitly overrode it and crashed both
+            # answer_full() and _build_context() (they call .upper()) the moment a
+            # masked node entered a result set. The anchor text already discloses
+            # ntype, so a "masked" tier reveals nothing further.
+            epistemic_status="masked",
         )
 
 
@@ -571,7 +586,7 @@ class AgenticRetriever(HybridRetriever):
 
         parts.append("=== RETRIEVED CONTEXT ===")
         for i, c in enumerate(chunks, 1):
-            ep_badge = f"[{c.epistemic_status.upper()}]"
+            ep_badge = _ep_badge(c)
             parts.append(
                 f"[{i}] {ep_badge} ({c.source_type}) {c.source_title} "
                 f"(score={c.score:.2f})\n{c.text}"

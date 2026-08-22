@@ -552,7 +552,13 @@ class TestPatternSurfacing:
             # Mock pattern detector to return a gap
             v.pattern_detector.analyze = MagicMock(return_value={
                 "total_conversations": 5,
-                "top_queried_sources": [("Neural Networks Paper", 4)],
+                # Must match PatternDetector.analyze()'s real shape: dicts, not
+                # tuples. The old tuple mock hid a live unpack bug in core.py and
+                # cli.py for as long as the real list stayed empty.
+                "top_queried_sources": [
+                    {"source_id": "paper_nn_001", "count": 4,
+                     "label": "Neural Networks Paper"},
+                ],
                 "priority_gaps": [
                     MagicMock(
                         claim_text="Neural networks generalize better with dropout",

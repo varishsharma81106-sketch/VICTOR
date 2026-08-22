@@ -628,7 +628,11 @@ class GapDetector:
             node = self.graph.get_node(s.claim_id)
             if node is None:
                 return 0.0
-            return float(node.get("importance_score", 0.0))
+            # importance_score lives under node["metadata"] — see graph.add_node()
+            # and retrieve.py's _node_importance(). Reading it at the top level
+            # returned 0.0 for every node, which made the sort a no-op and made
+            # any min_importance > 0 filter discard every gap.
+            return float(node.get("metadata", {}).get("importance_score", 0.0))
 
         gaps.sort(key=_importance, reverse=True)
 
@@ -673,11 +677,14 @@ class PatternDetector:
             if d.get("ntype") == NodeType.CONVERSATION
         )
 
-        # Top queried sources — nodes with highest retrieval_count
+        # Top queried sources — nodes with highest retrieval_count.
+        # The tally is written by graph.record_retrieval() into node["metadata"];
+        # this previously read it from the top level, where nothing ever writes it,
+        # so the list was permanently empty.
         source_counts: List[tuple] = []
         for nid, d in self.graph._g.nodes(data=True):
             if d.get("ntype") == NodeType.PAPER:
-                count = d.get("retrieval_count", 0)
+                count = d.get("metadata", {}).get("retrieval_count", 0)
                 if count > 0:
                     source_counts.append((nid, count, d.get("label", nid)))
         source_counts.sort(key=lambda x: x[1], reverse=True)
