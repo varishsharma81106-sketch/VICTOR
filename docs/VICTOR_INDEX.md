@@ -1,5 +1,5 @@
 # VICTOR — Document Index
-*Last updated: 2026-08-12 · Code version: v5.3.0*
+*Last updated: 2026-08-23 · Code version: v5.4*
 
 ---
 
@@ -21,11 +21,13 @@ All living documents are in the `docs/` directory. The canonical location for ev
 | [`VICTOR_THEORY_v1.md`](VICTOR_THEORY_v1.md) | What is the unit of value? What is the one job? | Implementation details, code, build order |
 | [`VICTOR_FOUNDATION_v2.md`](VICTOR_FOUNDATION_v2.md) | Design principles, irreducible components, system layers. | Current code state, bug list |
 | [`VICTOR_WHAT_IS_BUILT.md`](VICTOR_WHAT_IS_BUILT.md) | What exists in the code right now? What is broken? What is the next action? | Philosophy, long-term vision |
-| [`VICTOR_BUILD_SEQUENCE.md`](VICTOR_BUILD_SEQUENCE.md) | What gets built in what order, from current state to physical device? | Current bugs, philosophy |
+| [`VICTOR_BUILD_SEQUENCE.md`](VICTOR_BUILD_SEQUENCE.md) | What gets built in what order, from current state to physical device? **Phase-level, long horizon.** | Current bugs, philosophy, what to do this week |
+| [`VICTOR_NEXT.md`](VICTOR_NEXT.md) | **What to do on Monday.** Ordered, costed shortlist against v5.4, with what is deliberately not being done yet and why. Rewritten whenever an item lands. | Long-term phase ordering, philosophy |
 | [`VICTOR_ORIGINAL.md`](VICTOR_ORIGINAL.md) | What did Varish actually say when he conceived this? | Technical decisions, build plans |
 | [`VICTOR_MASTER_PRD_v3_6.md`](VICTOR_MASTER_PRD_v3_6.md) | Definition of Done, risk register, benchmark data, path to 90%+. | Philosophy, day-to-day code state |
 | [`VICTOR_SCIFACT_ACCURACY_PLAN.md`](VICTOR_SCIFACT_ACCURACY_PLAN.md) | Benchmark history, root cause diagnosis, ordered checklist to close DoD #4. | Philosophy, hardware |
-| [`VICTOR_STRATEGY.md`](VICTOR_STRATEGY.md) | Competitive landscape, MCP server plan, startup viability, roadmap. | Code state, philosophy |
+| [`VICTOR_STRATEGY.md`](VICTOR_STRATEGY.md) | MCP server plan, startup viability, roadmap. | Code state, philosophy, **the competitive landscape — section 1 is superseded** |
+| [`VICTOR_COMPETITIVE_2026-08.md`](VICTOR_COMPETITIVE_2026-08.md) | Who else does redaction over agent memory, checked against arXiv on 2026-08-23. What Victor can honestly claim is unique. | Code state, build order |
 | [`PROJECT_UPDATES.md`](PROJECT_UPDATES.md) | Today's changes, future recommendations, known issues. | Long-term vision |
 | [`VICTOR_STATUS_2026-08-12.md`](VICTOR_STATUS_2026-08-12.md) | **Current session status.** AAAI submission status, benchmark history, codebase state, immediate next steps. **Read this for a quick overview.** | Long-term philosophy |
 
@@ -59,7 +61,9 @@ Then read `VICTOR_THEORY_v1.md` if you need to remember what you're building tow
 Read `VICTOR_THEORY_v1.md`. Ask: does this feature improve production, preservation, or compounding of Epistemic Artifacts? If no, don't build it.
 
 **Deciding build order:**
-Read `VICTOR_BUILD_SEQUENCE.md`. Find where you are. Do the next step.
+Read `VICTOR_BUILD_SEQUENCE.md` for the phase you are in. Read `VICTOR_NEXT.md`
+for the specific next task inside it. If the two disagree, BUILD_SEQUENCE wins
+on ordering and NEXT wins on detail — and one of them needs updating.
 
 **Explaining Victor to someone new:**
 Give them `VICTOR_FOUNDATION_v2.md`. It is complete, honest, and does not require prior knowledge.
@@ -80,5 +84,7 @@ Read `VICTOR_SCIFACT_ACCURACY_PLAN.md`. It has every run's exact numbers, root c
 | June 2026 | v5.0 | Header bumped to v5.0. Added `VICTOR_MASTER_PRD_v3_4.md` to living documents — had been maintained through four versions but was never tracked here. |
 | June 2026 | v5.3 | Header bumped to v5.3. Added `VICTOR_SCIFACT_ACCURACY_PLAN.md` as a living document (working diagnosis + ordered checklist for DoD #4). Replaced PRD v3.5 entry with v3.6 (Runs 3–5, label-order fix, v5.3 NLI smoke-test infrastructure). Archived PRD v3.3, v3.4, and v3.5 with explanatory notes. |
 | 2026-06-28 | v5.3.0 (version string now matches across code and docs) | **`VICTOR_CANON.md` added to the living documents table — it existed and was being treated as authoritative elsewhere but was never actually listed here.** Cross-references added so THEORY_v1/FOUNDATION_v2 explicitly defer to CANON on vision questions. PRD v3.6 corrected: the 71.0% SciFact figure and label-order fix are real (developer-confirmed), not fabricated — the earlier doubt was a stale-snapshot problem, not a fabrication problem. `VICTOR_WHAT_IS_BUILT.md` Bug 3 closed (re-ran the test directly; it passes). Test count confirmed via real `pytest` run: 196/196. Updated to 212/212 after masking leak fix (2026-08-12).
+
+| 2026-08-23 | v5.4 | `VICTOR_NEXT.md` added as a living document — the short-horizon "what to do on Monday" list that BUILD_SEQUENCE was being misused for. `VICTOR_COMPETITIVE_2026-08.md` added; it supersedes section 1 of `VICTOR_STRATEGY.md`, whose "zero competitors have a redaction boundary" claim was re-checked against arXiv and found false. Test count 264 → 421 (real `pytest` run). |
 
 *Update this table every time a living document is revised or a new code version ships.*

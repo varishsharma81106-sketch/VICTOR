@@ -1,11 +1,15 @@
 # VICTOR — Build Sequence
-*From current state to physical device · June 2026 · Updated to v5.3*
+*From current state to physical device · June 2026 · Updated to v5.4 (2026-08-23)*
 
 ---
 
 > This document tells you what to build in what order and why the order matters.
 > Every phase is a complete, usable system at its own level before the next phase begins.
 > Do not start Phase N+1 until Phase N is verifiably working on real data.
+>
+> **This is the phase-level, long-horizon plan.** For the specific next task —
+> ordered, costed, and short enough to act on today — read
+> [`VICTOR_NEXT.md`](VICTOR_NEXT.md).
 
 ---
 
@@ -21,9 +25,17 @@ If no: do not build it. If yes: find where it fits in the sequence below and bui
 
 ## Current Position
 
-**Phase 0 complete. Phase 1A complete. YOU ARE HERE: Closing DoD #4 (SciFact benchmark ≥85%).**
+**Phase 0 complete and now verified on real data. Phase 1A complete. YOU ARE HERE: Closing DoD #4 (SciFact benchmark ≥85%).**
 
-Phase 0 (software brain, text-only) is complete — both bugs fixed, PatternDetector wired, full test suite passing (212/212).
+Phase 0 (software brain, text-only) is complete — both bugs fixed, PatternDetector wired, full test suite passing (421/421 as of v5.4).
+
+**Phase 0's one unverified exit criterion is now met (2026-08-23).** A real arXiv paper was ingested (13 claims, 15 concepts, 29 nodes), a real question was answered correctly with citations, and the PatternDetector fired unprompted to flag that the underlying claim had no experimental confirmation. The "no real research document has been ingested yet" caveat below is historical.
+
+Three capabilities landed in v5.4 that are not phases of their own but change what the later phases can assume:
+
+- **The referral layer** (`victor/referral.py`) — the machine walks its own masked memory one point at a time, states a reason per request, and is refused without a human in the loop. Phase 5's field prototype depends on this: a device alone at a site has no operator to click "reveal".
+- **The sensor simulation** (`victor/simulation.py`) — Phase 1B's fusion work can now be developed and regression-tested without hardware, against a seeded world where sensors disagree at known rates.
+- **Measured scale** — 20k nodes, 0.61s load, 2.8ms query. The whole-file JSON rewrite (12.1 MB at 20k) is the identified ceiling and is item 5 in `VICTOR_NEXT.md`.
 
 Phase 1A (audio ingestion) is complete — `AudioIngestor` with `LibrosaFeatureClassifier` ships in v5.0. Note: the build plan called for PANNs/ONNX for audio classification; what shipped is a simpler heuristic classifier using MFCCs and chroma features via librosa. Functional for producing MEASUREMENT nodes from audio; less accurate than PANNs would have been. Phase 1B (sensor fusion) should upgrade this before relying on audio for field research.
 
@@ -38,10 +50,12 @@ All five tasks done:
 - AgenticRetriever quadratic token counting bug fixed (`retrieve.py`)
 - `compute_statistics` metric conflation bug fixed (`kernels.py`)
 - SciFact benchmark run and documented (5 runs; see VICTOR_WHAT_IS_BUILT.md Results Log)
-- `victor gaps` not yet run on real data — this is the one unverified Phase 0 item
+- `victor gaps` run on real data ✅ (2026-08-23)
 - PatternDetector wired to surface unprompted (`core.py`, `cli.py`)
 
-**Status on real data:** no real research document has been ingested yet. Phase 0 exit criteria technically require `victor gaps` to produce useful output on at least one real document. This has not been verified. It is the lowest-effort open item in the entire phase map.
+**Status on real data:** ✅ verified 2026-08-23. `data/arxiv_selective_cot_medical_qa.txt` ingested on local `qwen2.5:7b` — 13 claims, 15 concepts, 29 nodes / 28 edges in 2m49s. A real query returned a correct, grounded, cited answer in 1m40s, and the gap machinery surfaced unprompted to flag the answer's underlying claim as experimentally unconfirmed. Phase 0 is closed on every criterion.
+
+The extraction was *usable*, not *clean* — duplicate claims, headings absorbed into claim text, and one concept split across three nodes by surface form. See `VICTOR_WHAT_IS_BUILT.md` → "Extraction quality" and item 2 of `VICTOR_NEXT.md`. None of it blocks Phase 1B; all of it taxes the compounding thesis.
 
 ---
 
