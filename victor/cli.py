@@ -682,7 +682,7 @@ def list_masked(ctx):
     table = Table(title="Masked Nodes")
     table.add_column("ID")
     table.add_column("Type")
-    table.add_column("Label")
+    table.add_column("Content")
     table.add_column("Frozen", justify="center")
     table.add_column("Importance", justify="right")
     for n in nodes:
@@ -690,7 +690,12 @@ def list_masked(ctx):
         table.add_row(
             n["id"][:16],
             n.get("ntype", ""),
-            (n.get("label") or "")[:60],
+            # Never the label. Listing the vault must not be a way to read the
+            # vault — a 60-char preview here is the same content leak that was
+            # closed on the anchor path in August 2026, just on a different
+            # route. The whole point of masking is that content surfaces only
+            # when the user explicitly calls one node by ID.
+            "[dim]████ content withheld[/dim]",
             "✓" if meta.get("frozen") else "",
             f"{meta.get('importance_score', 0):.2f}",
         )
@@ -797,6 +802,57 @@ def compute_effect(ctx, group_a, group_b):
     table.add_row("Cohen's d", f"{outputs['cohens_d']:.6f}")
     table.add_row("Magnitude", f"[{magnitude_color}]{outputs['magnitude']}[/{magnitude_color}]")
     console.print(table)
+
+
+# ── Web console ───────────────────────────────────────────────────────────────
+
+@cli.command()
+@click.option("--port", default=8420, show_default=True, help="Port to listen on.")
+@click.option(
+    "--host", default="127.0.0.1", show_default=True,
+    help="Interface to bind. Leave as localhost unless you know why you're changing it.",
+)
+@click.option("--open-browser/--no-open-browser", default=True, show_default=True)
+@click.pass_context
+def serve(ctx, port: int, host: str, open_browser: bool):
+    """Serve the Victor web console — a live view of the knowledge graph."""
+    from .web import serve as _serve
+
+    v = _v(ctx)
+    url = f"http://{host}:{port}"
+
+    if host not in ("127.0.0.1", "localhost", "::1"):
+        # Victor holds unpublished research and the console has no auth. Binding
+        # beyond loopback exposes the whole knowledge base, masked nodes included
+        # (their structure, if not their content), to anyone who can route to it.
+        console.print(Panel(
+            f"Binding to [bold]{host}[/bold], not localhost.\n"
+            "The console has no authentication. Anyone who can reach this host "
+            "can read the knowledge base.",
+            title="Exposed beyond loopback", border_style="red",
+        ))
+
+    stats = v.stats()["graph"]
+    console.print(Panel(
+        f"[bold cyan]{url}[/bold cyan]\n\n"
+        f"{stats['total_nodes']} nodes · {stats['total_edges']} connections\n"
+        f"Data directory: {v.config.home_dir}\n\n"
+        "[dim]Ctrl-C to stop.[/dim]",
+        title="Victor console", border_style="cyan",
+    ))
+
+    if open_browser:
+        import threading
+        import webbrowser
+        # Fire after a beat so the socket is listening before the tab loads.
+        threading.Timer(0.6, lambda: webbrowser.open(url)).start()
+
+    try:
+        _serve(v, host=host, port=port)
+    except OSError as exc:
+        console.print(f"[red]Could not bind {host}:{port}[/red] — {exc}")
+        raise SystemExit(1)
+    console.print("\n[dim]Console stopped.[/dim]")
 
 
 if __name__ == "__main__":

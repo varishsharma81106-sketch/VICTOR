@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Victor — Console</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="mark">▚</span>
+    <span class="name">VICTOR</span>
+    <span class="sub">research intelligence · local</span>
+  </div>
+  <div class="llm" id="llm-status"><span class="dot"></span><span id="llm-text">checking…</span></div>
+</header>
+
+<nav class="tabs" id="tabs">
+  <button class="tab active" data-view="overview">Overview</button>
+  <button class="tab" data-view="graph">Memory graph</button>
+  <button class="tab" data-view="ask">Ask</button>
+  <button class="tab" data-view="gaps">Gaps</button>
+  <button class="tab" data-view="vault">Masked vault</button>
+  <button class="tab" data-view="audit">Audit</button>
+</nav>
+
+<main>
+
+  <!-- ── OVERVIEW ─────────────────────────────────────────────────────── -->
+  <section class="view active" id="view-overview">
+    <div class="stat-grid" id="stat-grid"></div>
+
+    <div class="row">
+      <div class="panel">
+        <h2>What Victor holds</h2>
+        <div id="by-type" class="bars"></div>
+      </div>
+      <div class="panel">
+        <h2>Epistemic standing</h2>
+        <p class="hint">MEASUREMENT &gt; EXPERIMENT &gt; LITERATURE &gt; NOTE &gt; HYPOTHESIS.
+           Higher tiers are better-grounded knowledge.</p>
+        <div id="by-status" class="bars"></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Recent activity</h2>
+      <p class="hint">Every node carries the moment it was created or last retrieved. This is Victor's timeline.</p>
+      <div id="activity" class="list"></div>
+    </div>
+  </section>
+
+  <!-- ── GRAPH ────────────────────────────────────────────────────────── -->
+  <section class="view" id="view-graph">
+    <div class="graph-wrap">
+      <canvas id="graph-canvas"></canvas>
+
+      <div class="graph-legend">
+        <div class="legend-title">Node types</div>
+        <div id="legend-types"></div>
+        <div class="legend-title" style="margin-top:10px">State</div>
+        <div class="legend-row"><span class="swatch masked"></span> masked — content withheld</div>
+        <div class="legend-row"><span class="swatch frozen"></span> frozen — immutable</div>
+        <div class="legend-hint">Drag to pan · scroll to zoom · click a node</div>
+      </div>
+
+      <aside class="inspector" id="inspector">
+        <div class="inspector-empty">Click a node to inspect it.</div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- ── ASK ──────────────────────────────────────────────────────────── -->
+  <section class="view" id="view-ask">
+    <div class="ask-bar">
+      <input id="ask-input" type="text" placeholder="Ask Victor something about what it knows…" autocomplete="off">
+      <button id="ask-btn">Ask</button>
+    </div>
+    <div id="ask-result"></div>
+  </section>
+
+  <!-- ── GAPS ─────────────────────────────────────────────────────────── -->
+  <section class="view" id="view-gaps">
+    <div class="panel">
+      <h2>Unverified claims</h2>
+      <p class="hint">
+        Claims Victor is holding with no experimental confirmation behind them.
+        This is the research agenda — what would need to be true, and isn't yet checked.
+        Sorted by importance.
+      </p>
+      <div class="filter-row">
+        <label>Minimum importance
+          <input id="gap-threshold" type="range" min="0" max="1" step="0.05" value="0">
+          <span id="gap-threshold-val" class="mono">0.00</span>
+        </label>
+      </div>
+      <div id="gaps-list" class="list"></div>
+    </div>
+  </section>
+
+  <!-- ── VAULT ────────────────────────────────────────────────────────── -->
+  <section class="view" id="view-vault">
+    <div class="panel vault-explainer">
+      <h2>The masked memory graph</h2>
+      <p>
+        Masked nodes keep their place in the graph. Their relations, type, degree,
+        importance and retrieval history all stay live and keep influencing
+        reasoning — but the content is withheld until you call for it.
+      </p>
+      <p class="hint">
+        <b>Reveal</b> surfaces content for this console session only; nothing is
+        written to the graph and it goes back under when the server restarts.
+        <b>Unmask</b> is permanent. Both are written to the audit trail.
+      </p>
+    </div>
+    <div id="vault-list" class="list"></div>
+  </section>
+
+  <!-- ── AUDIT ────────────────────────────────────────────────────────── -->
+  <section class="view" id="view-audit">
+    <div class="panel">
+      <h2>Access trail</h2>
+      <p class="hint">Every mask, unmask, reveal and conceal, newest first — with the call site that did it.</p>
+      <div id="audit-list" class="list"></div>
+    </div>
+  </section>
+
+</main>
+
+<div id="toast" class="toast"></div>
+
+<script src="/app.js"></script>
+</body>
+</html>

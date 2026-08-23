@@ -16,6 +16,12 @@ setup(
         "Private :: Do Not Upload",  # blocks accidental PyPI publish
     ],
     packages=find_packages(include=["victor", "victor.*"]),
+    # The web console's static files are data, not modules, so find_packages()
+    # will not pick them up. Without this an installed Victor serves 404 for
+    # every asset while `python -m victor.cli serve` from a checkout works fine
+    # — the kind of split that only shows up after shipping.
+    package_data={"victor": ["webui/*.html", "webui/*.css", "webui/*.js"]},
+    include_package_data=True,
     install_requires=[
         "chromadb>=0.4.0",
         "sentence-transformers>=2.2.0",

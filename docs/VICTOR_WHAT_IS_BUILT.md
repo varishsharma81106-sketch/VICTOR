@@ -10,9 +10,9 @@
 
 ## The One-Line State
 
-Phase 0 and Phase 1 are complete. 212/212 tests pass (re-verified via actual `pytest` run, not estimated). The NLI cross-encoder is wired, label-order corrected, and smoke-tested locally (push pending — see Known Bugs). Best SciFact accuracy so far: **71.0%** (cross-check mode, n=100). DoD criterion #4 (>85%) is still open. No real research data has been ingested.
+Phase 0 and Phase 1 are complete. 264/264 tests pass (actual `pytest` run). Best SciFact accuracy so far: **71.0%** (cross-check mode, n=100); DoD criterion #4 (>85%) is still open. **Real research data has now been ingested** — see Results Log, 2026-08-23 — and the full retrieve→reason→report loop was exercised end to end against a real arXiv paper on local `qwen2.5:7b`. A web console (`victor serve`) now makes the graph and the masked memory mechanism visible.
 
-<!-- CURRENT_TEST_COUNT -->196<!-- /CURRENT_TEST_COUNT -->
+<!-- CURRENT_TEST_COUNT -->264<!-- /CURRENT_TEST_COUNT -->
 
 ---
 
@@ -39,6 +39,9 @@ victor/
 │   ├── chunker.py         — TextChunker
 │   ├── evaluate.py        — VictorEvaluator
 │   ├── scifact_benchmark.py — SciFact eval harness (5 runs completed; see Results Log)
+│   ├── web.py             — Web console: stdlib HTTP server + JSON API. Redaction enforced
+│   │                        server-side (VictorAPI._redact / _redact_meta), RevealSession
+│   ├── webui/             — index.html, app.js, style.css. Vanilla JS, no CDN, no build step
 │   └── config.py          — VictorConfig
 ├── tests/
 │   ├── test_agent_loop.py
@@ -89,8 +92,9 @@ victor/
 | Agent loop (agentic retrieval) | ✅ Built, token bug fixed | `retrieve.py` → AgenticRetriever; quadratic token counting fixed v4.6→v5.0 |
 | SciFact benchmark — machinery | ✅ Built + NLI wired | `scifact_benchmark.py` → `--nli-model`, `--nli-threshold`, `--nli-primary`, `--nli-label-order` |
 | SciFact benchmark — accuracy ≥85% | ❌ Open | Current best: 71.0% (Run 5). See Results Log. |
-| FastAPI endpoint | ❌ Not built | No web interface |
-| Graph visualization | ❌ Not built | No browser view |
+| Web console (HTTP API + UI) | ✅ Built | `web.py` — stdlib `http.server`, no new deps. `victor serve` |
+| Graph visualization | ✅ Built | `webui/app.js` — canvas force layout; masked nodes drawn hollow |
+| Masked memory made operable | ✅ Built | Vault view, session reveal vs permanent unmask, audit trail |
 | Spectral ingestion | ❌ Not started | Layer 1, Phase 1C |
 
 ---
@@ -121,11 +125,56 @@ Additionally, `dleemiller/ModernCE-large-nli` outputs labels in `["entailment", 
 
 ---
 
+## Divergences From the Original Conception — Masked Memory
+
+*Checked against `VICTOR_ORIGINAL.md` §4, which is the document that wins on
+matters of intent. Recorded 2026-08-23.*
+
+`VICTOR_ORIGINAL.md` calls the masked memory graph "the most original idea in the
+entire conception" and warns that earlier sessions "dropped [it] as a detail".
+Measuring the code against the source text rather than against later PRDs:
+
+| Original framing | Status |
+|---|---|
+| "every experiment… connects through a relation" — relational anchors stay live | ✅ Masking never touches edges. Verified by test. |
+| Content withheld until called | ✅ Enforced at retrieval, in the CLI, and at the API boundary. |
+| "one recording only getting through when the user decides to call it" | ⚠️ Partial. `unmask` is a permanent declassification, not a momentary surfacing. The web console adds a **session reveal** that surfaces one node without writing to the graph, which is closer to the original sense. The CLI still only has the permanent verb. |
+| Masking as the default posture of memory | ❌ Not built. `is_masked` defaults `False`; you opt in per node. The original describes the inverse — memory that is masked *by nature*, with recall as the act that surfaces it. This is the largest remaining gap, and it is a design decision, not a bug: flipping the default changes every retrieval path. |
+| "lets the user decide what the AI has to publish" — sovereign switch | ⚠️ Partial. Masking governs what reaches the LLM; `export` is still unencrypted and has no per-node publish gate. |
+| "sovereign cybersecurity model" — defensive system | ❌ Not built. Distinct from the publish switch per §5 of the original; nothing implements it. |
+
+### Masking leaks found and fixed 2026-08-23
+
+Two more instances of the same bug class that was fixed on the anchor path in
+August. Both were found by scanning *whole serialised responses* for the secret
+rather than checking individual fields — the technique that catches leaks
+through fields nobody thought to check.
+
+1. **`victor list-masked` printed 60 characters of every masked node's label.**
+   Browsing the vault was a way to read the vault. Now prints `████ content withheld`.
+2. **`/api/node` returned raw node metadata for masked nodes.** Claim nodes carry
+   the extractor's `metric`/`value`/`direction` fields, so the label was withheld
+   while `{"value": "8.70%, -19.0%, -17.6%"}` was published. For a scientific claim
+   the metric *is* the content. Fixed with an allowlist (`STRUCTURAL_META_KEYS`),
+   not a denylist — a denylist fails open every time the extractor learns a field.
+
+### Known asymmetry — not yet fixed
+
+`Victor.mask()` deletes the node's chunks from ChromaDB to close the embedding
+covert channel. `Victor.unmask()` does **not** re-embed them. A mask→unmask cycle
+therefore permanently removes the node from vector search; it survives only as a
+graph node reachable by semantic query and hop expansion. This is data loss on a
+reversible-looking operation.
+
+---
+
 ## What Is NOT Built (Confirmed Absent)
 
-- `api.py` — no FastAPI or any web endpoint. CLI only.
-- Graph visualization — no browser view of the knowledge graph.
 - Spectral ingestion — no spectrometer pipeline.
+- Authentication on the web console — it binds loopback only and has no login. Do not bind it to `0.0.0.0`.
+- Masking as the *default* memory posture — `is_masked` defaults to `False` and
+  masking is opt-in per node. `VICTOR_ORIGINAL.md` §4 describes memory as masked
+  by default with content surfacing only on explicit call. See "Divergences".
 - Encryption on export — `export` command exists but output is unencrypted.
 - LoRA fine-tuning pipeline — not started. Correctly gated on DoD #4 (SciFact ≥85%).
 - Multi-user or federation — out of scope until single-user is solid.
@@ -204,6 +253,32 @@ Do not run a 300-sample full dev set until one configuration clears ~83% on n=10
 | 2026-08-12 | Masking leak fixed | Removed 40-char label leak from `tools.py`, `reasoning.py`, `retrieve.py`. Anchors now show `[MASKED — claim — content withheld]` with no content leakage. 212/212 tests pass. |
 | 2026-08-12 | SciFact Run 6 — v5.3, deberta-v3-base, NLI primary mode (label order fixed), n=100 | **8.0%** — All 100 samples predicted "inconclusive" (neutral). Label order smoke test PASSED. Root cause: DeBERTa-v3-base NLI fine-tuned on MNLI (short sentence pairs) cannot handle long scientific text (200-word abstracts). Cross-encoder defaults to neutral on every input. Confirms cross-check architecture is the correct approach for this model. |
 | — | SciFact DoD #4 (>85%) | **Not yet closed.** Current best: 71.0% (cross-check mode). Primary mode conclusively ruled out for DeBERTa-v3-base on long text. Next: self-consistency voting, threshold sweep, or fine-tuning. |
+| 2026-08-23 | Four core-loop defects fixed (`8ce0541`) | Masked nodes crashed `answer_full()` (`epistemic_status=None` → `.upper()`); gap ranking read `importance_score` at the wrong nesting level so every gap scored 0.0; `top_queried_sources` was never written *and* emitted dicts against tuple-unpacking consumers; Ollama sampling temperature was the daemon's 0.8, not Victor's. +19 regression tests, 17 of which fail on the pre-fix tree. |
+| 2026-08-23 | **First real-document ingest** | `data/arxiv_selective_cot_medical_qa.txt` → 4 chunks, **13 claims, 15 concepts, 29 nodes / 28 edges** in 2m49s on an RTX 4050 (6 GB) with `qwen2.5:7b`. Answers PRD v3.6 §5's "most important unresolved question": Victor does produce usable structure from a real paper. Extraction quality notes below. |
+| 2026-08-23 | Real query through the full loop | *"How much does Selective CoT reduce inference time, and what does it cost in accuracy?"* → correct, grounded, cited answer in 1m40s, **and the PatternDetector fired unprompted** to flag that the underlying claim has no experimental confirmation. The epistemic layer earns its place: the system answered *and* qualified the answer. |
+| 2026-08-23 | Web console shipped | `victor serve` — stdlib-only HTTP server, canvas graph view, gaps, vault, audit. 33 tests, centred on the redaction boundary. Two masking leaks found and fixed in the process (see Divergences). |
+
+### Extraction quality — observed on the first real paper
+
+Worth recording because the numbers above say nothing about whether the claims
+are *good*. From the 13 extracted:
+
+- **Duplicates survive dedup.** `"wall-clock time drops by approximately 13-45%"`
+  is a literal substring of a longer extracted claim, and both were kept.
+  `claim_similarity_threshold` is 0.75 cosine, which does not catch containment.
+- **Section headings contaminate claims.** One claim begins
+  `"2.2 Selective Chain-of-thought Medical questions can be broadly grouped…"` —
+  the heading was absorbed into the claim text.
+- **Sentence fragments.** One claim starts mid-sentence: `"more output tokens,
+  higher latency, and…"`, orphaned from its subject by a chunk boundary.
+- **Concept nodes fragment on surface form.** `Selective Chain-of-Thought (Selective CoT)`,
+  `Selective Chain-of-Thought`, and `Selective CoT` are three separate nodes for
+  one concept; likewise `computational cost` / `computational costs`. This
+  directly suppresses the connection density that `VICTOR_THEORY_v1` says the
+  value scales with.
+
+None of these are crashes, which is why 264 green tests say nothing about them.
+They are the next real work.
 
 ---
 
