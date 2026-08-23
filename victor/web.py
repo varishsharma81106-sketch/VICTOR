@@ -26,6 +26,7 @@ Design constraints, in priority order
 """
 from __future__ import annotations
 
+import heapq
 import json
 import logging
 import mimetypes
@@ -226,23 +227,62 @@ class VictorAPI:
             },
         }
 
-    def graph(self, limit: int = 600) -> Dict[str, Any]:
+    def graph(
+        self,
+        limit: int = 600,
+        ntype: Optional[str] = None,
+        min_importance: float = 0.0,
+        focus: Optional[str] = None,
+        hops: int = 2,
+    ) -> Dict[str, Any]:
         """
-        The whole graph, redacted, for drawing.
+        A drawable slice of the graph, redacted.
 
         Edges are always returned in full even when both endpoints are masked —
         withholding them would destroy the one thing masked memory promises to
         keep: the relational anchors.
+
+        At 100,000 nodes "the whole graph" is neither drawable nor meaningful,
+        so the slice is chosen rather than truncated: `focus` restricts to one
+        node's neighbourhood, `ntype`/`min_importance` filter, and whatever
+        survives is ranked by importance before the cut.
         """
         g = self.v.graph._g
-        nodes = [self._redact(nid, data) for nid, data in g.nodes(data=True)]
-        truncated = len(nodes) > limit
+        total = g.number_of_nodes()
+
+        if focus is not None and g.has_node(focus):
+            scope = {focus} | {
+                nid for nid, _, _ in self.v.graph.get_neighbors(focus, hops=hops)
+            }
+        else:
+            focus = None
+            scope = None
+
+        # Rank on raw metadata before building a single redacted dict. The old
+        # code built one per node and discarded 99.4% of them, which is why a
+        # 100k-node graph cost 344 ms to draw.
+        candidates: List[Tuple[float, str]] = []
+        source = scope if scope is not None else g.nodes
+        for nid in source:
+            data = g.nodes[nid]
+            if ntype and data.get("ntype") != ntype:
+                continue
+            meta = data.get("metadata") or {}
+            imp = float(meta.get("importance_score", 0.5))
+            if imp < min_importance:
+                continue
+            candidates.append((imp, nid))
+
+        matched = len(candidates)
+        truncated = matched > limit
         if truncated:
-            # Keep the most important nodes rather than an arbitrary slice, so a
-            # truncated view is still the useful part of the graph.
-            nodes.sort(key=lambda n: n["importance"], reverse=True)
-            nodes = nodes[:limit]
-        keep = {n["id"] for n in nodes}
+            candidates = heapq.nlargest(limit, candidates, key=lambda c: c[0])
+
+        keep = {nid for _, nid in candidates}
+        nodes = [self._redact(nid, g.nodes[nid]) for nid in keep]
+
+        # Only an edge leaving a kept node can have both endpoints kept, so the
+        # nbunch form visits O(kept x degree) edges rather than all of E.
         links = [
             {
                 "source": s,
@@ -250,14 +290,105 @@ class VictorAPI:
                 "etype": d.get("etype", "related"),
                 "weight": round(float(d.get("weight", 1.0)), 3),
             }
-            for s, t, d in g.edges(data=True)
-            if s in keep and t in keep
+            for s, t, d in g.out_edges(keep, data=True)
+            if t in keep
         ]
         return {
             "nodes": nodes,
             "links": links,
             "truncated": truncated,
-            "total_nodes": g.number_of_nodes(),
+            "matched": matched,
+            "total_nodes": total,
+            "focus": focus,
+        }
+
+    # Sort keys the browse endpoint accepts. An allowlist because the value
+    # arrives from a query string and is used to pick a metadata field.
+    SORTS = {
+        "importance": lambda m: float(m.get("importance_score", 0.0)),
+        "retrievals": lambda m: int(m.get("retrieval_count", 0)),
+        "recent": lambda m: str(m.get("last_retrieved_at") or ""),
+        "created": lambda m: str(m.get("created_at") or ""),
+    }
+
+    def search(
+        self,
+        q: str = "",
+        ntype: Optional[str] = None,
+        status: Optional[str] = None,
+        masked: Optional[bool] = None,
+        mode: str = "text",
+        sort: str = "importance",
+        limit: int = 50,
+        offset: int = 0,
+    ) -> Dict[str, Any]:
+        """
+        Find nodes in a graph too large to look at. Paged, sorted, filtered.
+
+        Masked nodes are matched on structure only — type, status, degree, id —
+        never on their text. Substring-matching a query against withheld content
+        would turn this endpoint into an oracle: ask for "palladium", see
+        whether the masked node appears, and the mask has told you its contents
+        one guess at a time. Structural facts are already published by the vault
+        view, so exposing those costs nothing new.
+        """
+        g = self.v.graph._g
+        needle = q.strip().lower()
+
+        if mode == "semantic" and needle:
+            # semantic_query already excludes masked nodes at the graph layer.
+            ranked = self.v.graph.semantic_query(q, top_k=limit + offset)
+            page = ranked[offset : offset + limit]
+            return {
+                "results": [
+                    dict(self._redact(nid, data), score=round(score, 4))
+                    for nid, score, data in page
+                ],
+                "total": len(ranked),
+                "offset": offset,
+                "limit": limit,
+                "mode": "semantic",
+                "note": "Semantic search never reaches masked nodes.",
+            }
+
+        keyfn = self.SORTS.get(sort, self.SORTS["importance"])
+        hits: List[Tuple[Any, str]] = []
+        for nid, data in g.nodes(data=True):
+            meta = data.get("metadata") or {}
+            is_masked = bool(meta.get("is_masked", False))
+            if masked is not None and is_masked != masked:
+                continue
+            if ntype and data.get("ntype") != ntype:
+                continue
+            if status and meta.get("epistemic_status") != status:
+                continue
+            if needle:
+                if is_masked and not self.session.is_revealed(nid):
+                    continue
+                if needle not in str(data.get("label", "")).lower():
+                    continue
+            hits.append((keyfn(meta), nid))
+
+        hits.sort(key=lambda h: h[0], reverse=True)
+        page = hits[offset : offset + limit]
+        return {
+            "results": [
+                dict(
+                    self._redact(nid, g.nodes[nid]),
+                    degree=g.in_degree(nid) + g.out_degree(nid),
+                )
+                for _, nid in page
+            ],
+            "total": len(hits),
+            "offset": offset,
+            "limit": limit,
+            "mode": "text",
+            "note": (
+                "Masked nodes are excluded from text matching — searching their "
+                "content would leak it one query at a time."
+                if needle
+                else ""
+            ),
         }
 
     def node(self, node_id: str) -> Optional[Dict[str, Any]]:
@@ -400,6 +531,117 @@ class VictorAPI:
             "asked_at": datetime.now(timezone.utc).isoformat(),
         }
 
+    # ── the machine ───────────────────────────────────────────────────────────
+
+    def deliberate(
+        self,
+        query: str,
+        budget: int = 3,
+        sensors: int = 0,
+        use_llm: bool = False,
+    ) -> Dict[str, Any]:
+        """
+        Run one referral pass and return the whole trace.
+
+        This is the `ask` endpoint's opposite. `ask` retrieves five chunks by
+        cosine distance and hands them to a model that then explains whatever
+        arrived; masked memory shows up in the context as an inert anchor the
+        model can read about but not act on. Here the machine is handed a table
+        of *handles* — what each piece of memory is, never what it says — and it
+        spends a budget: one handle at a time, each with a stated reason, each
+        request answered with a grant or a refusal, all of it recorded.
+
+        The point of surfacing this in the console is that the deliberation is
+        the machine's, not the operator's. Nobody clicks "reveal". The machine
+        reaches the masked node, asks for it, is told no, and says so in its
+        conclusion. What the operator sees is what Victor would do at 3am on a
+        rig with nobody watching.
+
+        `sensors` runs that many ticks of the robot scenario on a throwaway
+        graph first and offers the freshest readings into the same table, so a
+        live observation and a six-month-old paper compete on equal terms.
+        """
+        from .referral import DeliberateReasoner, PolicyChooser, ReferralDesk, summarise
+
+        query = (query or "").strip()
+        budget = max(1, min(8, int(budget or 3)))
+
+        sensor_block: Optional[Dict[str, Any]] = None
+        fragments: List[Any] = []
+        if sensors > 0:
+            sensor_block, fragments = self._sensor_fragments(int(sensors))
+
+        desk = ReferralDesk(
+            self.v.graph,
+            vector_store=getattr(self.v, "vector_store", None),
+            # Session reveals are the only authority. The default is refuse-all;
+            # a reasoning pass that could silently unmask would not be a trust
+            # boundary, it would be a delay.
+            authority=self.session.is_revealed,
+            budget=budget,
+            ledger_path=Path(self.v.graph.graph_file).parent / "referral_ledger.jsonl",
+        )
+
+        llm = getattr(self.v, "llm", None) if use_llm else None
+        if llm is not None and not getattr(llm, "is_available", lambda: False)():
+            llm = None
+        # No model available is the normal field case, not a degraded one: the
+        # policy chooser decides from the handles alone.
+        reasoner = DeliberateReasoner(
+            desk, llm=llm, chooser=None if llm else PolicyChooser()
+        )
+        result = reasoner.run(query, fragments=fragments)
+
+        return {
+            "deliberation": result.as_dict(),
+            "rendered": result.table.render(),
+            "summary": summarise(result),
+            "chose_by": "language model" if llm else "policy (no model available)",
+            "sensors": sensor_block,
+            "revealed_this_session": self.session.all(),
+            "at": datetime.now(timezone.utc).isoformat(),
+        }
+
+    def _sensor_fragments(self, ticks: int) -> Tuple[Dict[str, Any], List[Any]]:
+        """
+        Run the robot scenario on a scratch graph and return its live readings.
+
+        A scratch graph, emphatically: the console must be able to demonstrate
+        the machine without writing simulated observations into the user's real
+        knowledge base. The embedder is shared because loading a second copy of
+        the model would cost more than the whole simulation.
+        """
+        import tempfile
+
+        from .graph import VictorKnowledgeGraph
+        from .simulation import STRANDED_SITE, Simulation
+
+        ticks = max(1, min(40, ticks))
+        with tempfile.TemporaryDirectory(prefix="victor-machine-") as tmp:
+            scratch = VictorKnowledgeGraph(Path(tmp) / "sim.json", self.v.embedder)
+            sim = Simulation(scratch, STRANDED_SITE, seed=7, save_dir=Path(tmp) / "frames")
+            sim.run(ticks=ticks)
+            fragments = sim.fragments()
+            block = {
+                "scenario": STRANDED_SITE.name,
+                "ticks": ticks,
+                "report": sim.report(),
+                "readings": [
+                    {
+                        "id": f.fragment_id,
+                        "source": f.source,
+                        "confidence": round(f.confidence, 3),
+                        "masked": f.masked,
+                        # The reading itself only when it is not sensitive. A
+                        # panel that prints what the referral table withholds
+                        # would undo the table two divs away.
+                        "text": REDACTED if f.masked else f.text,
+                    }
+                    for f in fragments
+                ],
+            }
+        return block, fragments
+
     def patterns(self) -> Dict[str, Any]:
         """What Victor has noticed about how it's being used."""
         base = self.v.patterns()
@@ -521,11 +763,55 @@ def _parse_query(qs: str) -> Dict[str, str]:
     return out
 
 
+def _clamp_int(params: Dict[str, str], key: str, default: int, lo: int, hi: int) -> int:
+    """
+    Query-string integers are attacker-controlled even on localhost — a stray
+    `?limit=100000000` should not ask the server to build a hundred million
+    dicts. Unparseable values fall back to the default rather than 500.
+    """
+    try:
+        return max(lo, min(hi, int(params.get(key, default))))
+    except (TypeError, ValueError):
+        return default
+
+
+def _body_int(body: Dict[str, Any], key: str, default: int, lo: int, hi: int) -> int:
+    """`_clamp_int` for JSON bodies, where the value arrives as int, str or junk."""
+    try:
+        return max(lo, min(hi, int(body.get(key, default))))
+    except (TypeError, ValueError):
+        return default
+
+
+def _opt_bool(params: Dict[str, str], key: str) -> Optional[bool]:
+    raw = params.get(key)
+    if raw is None or raw == "":
+        return None
+    return raw.lower() in ("1", "true", "yes")
+
+
 def _dispatch_get(api: VictorAPI, path: str, params: Dict[str, str]) -> Tuple[int, Any]:
     if path == "/api/overview":
         return 200, api.overview()
     if path == "/api/graph":
-        return 200, api.graph(limit=int(params.get("limit", 600)))
+        return 200, api.graph(
+            limit=_clamp_int(params, "limit", 600, 1, 5000),
+            ntype=params.get("ntype") or None,
+            min_importance=float(params.get("min_importance", 0.0) or 0.0),
+            focus=params.get("focus") or None,
+            hops=_clamp_int(params, "hops", 2, 1, 4),
+        )
+    if path == "/api/search":
+        return 200, api.search(
+            q=params.get("q", ""),
+            ntype=params.get("ntype") or None,
+            status=params.get("status") or None,
+            masked=_opt_bool(params, "masked"),
+            mode=params.get("mode", "text"),
+            sort=params.get("sort", "importance"),
+            limit=_clamp_int(params, "limit", 50, 1, 500),
+            offset=_clamp_int(params, "offset", 0, 0, 10_000_000),
+        )
     if path == "/api/masked":
         return 200, api.masked()
     if path == "/api/audit":
@@ -548,6 +834,16 @@ def _dispatch_post(api: VictorAPI, path: str, body: Dict[str, Any]) -> Tuple[int
         if not query:
             return 400, {"error": "query is required"}
         return 200, api.ask(query)
+    if path == "/api/deliberate":
+        query = (body.get("query") or "").strip()
+        if not query:
+            return 400, {"error": "query is required"}
+        return 200, api.deliberate(
+            query,
+            budget=_body_int(body, "budget", 3, 1, 8),
+            sensors=_body_int(body, "sensors", 0, 0, 40),
+            use_llm=bool(body.get("llm")),
+        )
     if path == "/api/reveal":
         return 200, api.reveal(body.get("node_id", ""))
     if path == "/api/conceal":

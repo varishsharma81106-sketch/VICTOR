@@ -4,7 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Victor — Console</title>
-<link rel="stylesheet" href="/style.css">
+<!-- Relative, not absolute: opened straight from disk, "/style.css"
+     resolves to the filesystem root and the console renders unstyled. -->
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
 
@@ -20,7 +22,9 @@
 <nav class="tabs" id="tabs">
   <button class="tab active" data-view="overview">Overview</button>
   <button class="tab" data-view="graph">Memory graph</button>
+  <button class="tab" data-view="find">Find</button>
   <button class="tab" data-view="ask">Ask</button>
+  <button class="tab" data-view="machine">Machine</button>
   <button class="tab" data-view="gaps">Gaps</button>
   <button class="tab" data-view="vault">Masked vault</button>
   <button class="tab" data-view="audit">Audit</button>
@@ -54,6 +58,34 @@
 
   <!-- ── GRAPH ────────────────────────────────────────────────────────── -->
   <section class="view" id="view-graph">
+    <!-- At 100k nodes "the whole graph" is not a picture. These controls pick
+         the slice; the server ranks by importance and cuts what's left. -->
+    <div class="graph-controls">
+      <label>Type
+        <select id="g-type"><option value="">all</option></select>
+      </label>
+      <label>Min importance
+        <input id="g-imp" type="range" min="0" max="1" step="0.05" value="0">
+        <span id="g-imp-val" class="mono">0.00</span>
+      </label>
+      <label>Around
+        <input id="g-focus" type="text" class="mono" placeholder="node id" autocomplete="off">
+      </label>
+      <label>Hops
+        <select id="g-hops">
+          <option>1</option><option selected>2</option><option>3</option><option>4</option>
+        </select>
+      </label>
+      <label>Max drawn
+        <select id="g-limit">
+          <option>200</option><option selected>600</option><option>1500</option>
+        </select>
+      </label>
+      <button class="act" id="g-apply">Apply</button>
+      <button class="act" id="g-clear">Whole graph</button>
+      <span class="graph-count mono" id="g-count"></span>
+    </div>
+
     <div class="graph-wrap">
       <canvas id="graph-canvas"></canvas>
 
@@ -72,6 +104,52 @@
     </div>
   </section>
 
+  <!-- ── FIND ─────────────────────────────────────────────────────────── -->
+  <section class="view" id="view-find">
+    <div class="panel">
+      <h2>Find</h2>
+      <p class="hint">
+        Browsing a graph too large to look at. Text search never matches the
+        content of a masked node — that would leak it one guess at a time — but
+        masked nodes stay findable by type, standing and state, and they still
+        report their degree. Structure is public; content is not.
+      </p>
+
+      <div class="find-bar">
+        <input id="find-q" type="text" placeholder="Search labels…" autocomplete="off">
+        <select id="find-mode">
+          <option value="text">text</option>
+          <option value="semantic">meaning</option>
+        </select>
+        <button id="find-btn">Search</button>
+      </div>
+
+      <div class="filter-row wrap">
+        <label>Type <select id="find-type"><option value="">any</option></select></label>
+        <label>Standing <select id="find-status"><option value="">any</option></select></label>
+        <label>State
+          <select id="find-masked">
+            <option value="">any</option>
+            <option value="true">masked</option>
+            <option value="false">visible</option>
+          </select>
+        </label>
+        <label>Sort
+          <select id="find-sort">
+            <option value="importance">importance</option>
+            <option value="retrievals">most consulted</option>
+            <option value="recent">recently used</option>
+            <option value="created">newest</option>
+          </select>
+        </label>
+      </div>
+
+      <div id="find-note" class="hint"></div>
+      <div id="find-list" class="list"></div>
+      <div class="pager" id="find-pager"></div>
+    </div>
+  </section>
+
   <!-- ── ASK ──────────────────────────────────────────────────────────── -->
   <section class="view" id="view-ask">
     <div class="ask-bar">
@@ -79,6 +157,55 @@
       <button id="ask-btn">Ask</button>
     </div>
     <div id="ask-result"></div>
+  </section>
+
+  <!-- ── MACHINE ──────────────────────────────────────────────────────── -->
+  <!--
+    The other tabs are for a person operating Victor. This one is for watching
+    Victor operate itself. Nothing here is clickable except "Run" — the point is
+    that the machine reaches the masked memory, asks, is refused, and says so,
+    with no human in the loop deciding what it may read.
+  -->
+  <section class="view" id="view-machine">
+    <div class="panel">
+      <h2>Victor inside a machine</h2>
+      <p class="hint">
+        Ask is bulk retrieval: five chunks arrive by cosine distance and the model
+        explains whatever it was handed. Here the machine is handed <b>referral
+        points</b> instead — a line per memory saying what it <i>is</i>, never what
+        it <i>says</i> — and it spends a budget one handle at a time, stating a
+        reason for each. Masked memory is a door with a log, not a hole in the
+        context: the machine can knock, and the refusal is part of the record.
+      </p>
+
+      <div class="find-bar">
+        <input id="m-q" type="text" autocomplete="off"
+               placeholder="What should the machine work out?">
+        <button id="m-run">Run</button>
+      </div>
+      <div class="filter-row wrap">
+        <label>Dereference budget
+          <select id="m-budget">
+            <option>1</option><option>2</option><option selected>3</option>
+            <option>5</option><option>8</option>
+          </select>
+        </label>
+        <label>Live sensors
+          <select id="m-sensors">
+            <option value="0" selected>off — stored memory only</option>
+            <option value="10">10 ticks of the stranded-site rig</option>
+            <option value="25">25 ticks</option>
+            <option value="40">40 ticks</option>
+          </select>
+        </label>
+        <label class="check">
+          <input id="m-llm" type="checkbox"> use the language model to choose
+        </label>
+      </div>
+      <p class="hint" id="m-note"></p>
+    </div>
+
+    <div id="m-out"></div>
   </section>
 
   <!-- ── GAPS ─────────────────────────────────────────────────────────── -->
@@ -130,7 +257,11 @@
 </main>
 
 <div id="toast" class="toast"></div>
+<div id="file-warning" class="file-warning" hidden>
+  This page was opened from disk, so it has no server to talk to and every panel
+  will stay empty. Run <code>victor web</code> and open the address it prints.
+</div>
 
-<script src="/app.js"></script>
+<script src="app.js"></script>
 </body>
 </html>

@@ -370,3 +370,60 @@ class TestOllamaTemperature:
         from victor.config import VictorConfig
 
         assert VictorConfig().llm_temperature == 0.1
+
+
+# ── 5. graph.py — get_neighbors walked one hop further than it was asked to ───
+
+class TestNeighbourhoodDepth:
+    """
+    The BFS expanded nodes that had already reached the depth limit, so every
+    caller got hops+1. Nothing caught it because the graph tests only ever used
+    a chain shorter than the limit, and every retrieval test mocks the method
+    out. The cost was invisible and real: `graph_hop_depth = 2` pulled 3-hop
+    nodes into the model's context on every single `victor ask`.
+    """
+
+    @pytest.fixture
+    def chain(self, mock_embedder, tmp_path):
+        """n0 → n1 → … → n8, one directed edge each."""
+        from victor.graph import VictorKnowledgeGraph
+
+        g = VictorKnowledgeGraph(tmp_path / "graph.json", mock_embedder)
+        for i in range(9):
+            g.add_node(f"n{i}", NodeType.CLAIM, f"claim {i}")
+        for i in range(8):
+            g.add_edge(f"n{i}", f"n{i + 1}", "related_to")
+        return g
+
+    def _ids(self, g, hops):
+        return {nid for nid, _, _ in g.get_neighbors("n4", hops=hops)}
+
+    def test_one_hop_is_the_immediate_neighbours(self, chain):
+        assert self._ids(chain, 1) == {"n3", "n5"}
+
+    def test_two_hops_does_not_reach_three(self, chain):
+        assert self._ids(chain, 2) == {"n2", "n3", "n5", "n6"}
+
+    def test_depth_grows_by_exactly_one_layer_per_hop(self, chain):
+        assert len(self._ids(chain, 3)) == 6
+        assert len(self._ids(chain, 4)) == 8
+
+    def test_the_focus_is_never_its_own_neighbour(self, chain):
+        for hops in (1, 2, 3, 4):
+            assert "n4" not in self._ids(chain, hops)
+
+    def test_a_node_reachable_two_ways_is_reported_once(self, chain):
+        """
+        Diamond: n4 → x → n6 duplicates the n4 → n5 → n6 path. The old code
+        marked nodes visited on expansion rather than discovery, so n6 was
+        appended to the result list twice and counted twice downstream.
+        """
+        chain.add_node("x", NodeType.CLAIM, "a parallel route")
+        chain.add_edge("n4", "x", "related_to")
+        chain.add_edge("x", "n6", "related_to")
+
+        found = [nid for nid, _, _ in chain.get_neighbors("n4", hops=2)]
+        assert len(found) == len(set(found))
+
+    def test_zero_hops_returns_nothing(self, chain):
+        assert chain.get_neighbors("n4", hops=0) == []

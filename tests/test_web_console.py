@@ -81,6 +81,13 @@ class TestRedactionBoundary:
             "activity": api.activity(limit=999),
             "node": api.node("secret1"),
             "audit": api.audit(),
+            # Search is queried with the secret itself. An endpoint that takes
+            # attacker-chosen text and reports which nodes contain it is the
+            # most direct route out of the vault there is.
+            "search_all": api.search(limit=500),
+            "search_secret": api.search(q=SECRET),
+            "search_value": api.search(q=SECRET_VALUE),
+            "search_semantic": api.search(q=SECRET, mode="semantic"),
         }, default=str)
 
     def test_secret_is_visible_before_masking(self, seeded, api):
@@ -357,3 +364,450 @@ class TestAsk:
         result = api.ask("catalyst")
         for chunk in result["chunks"]:
             assert chunk["masked_anchor"] == (chunk["epistemic_status"] == "masked")
+
+
+class TestSearchIsNotAnOracle:
+    """
+    A search box over a masked graph is a content leak waiting to happen.
+
+    Even with labels redacted in the response, *membership* answers the
+    question: ask for "palladium", see the masked node come back, and the mask
+    has told you what it was hiding. Repeat with different guesses and you read
+    the vault a word at a time without ever seeing a label. So masked nodes are
+    matched on structure only, never on their text.
+    """
+
+    def test_searching_the_secret_returns_nothing(self, seeded, api):
+        api.set_mask("secret1", True)
+
+        res = api.search(q="PALLADIUM")
+
+        assert res["results"] == []
+        assert res["total"] == 0
+
+    def test_a_substring_of_the_secret_also_returns_nothing(self, seeded, api):
+        """The oracle is built from partial guesses, not whole ones."""
+        api.set_mask("secret1", True)
+
+        for guess in ("palladium", "40psi", "undisclosed", "catalyst", "carbon"):
+            assert api.search(q=guess)["total"] == 0, f"leaked on {guess!r}"
+
+    def test_it_cannot_be_confirmed_by_narrowing(self, seeded, api):
+        """
+        The attack is incremental: each guess that returns a hit confirms a
+        substring. Every prefix must be equally silent, not just the words a
+        test author happened to think of.
+        """
+        api.set_mask("secret1", True)
+        for n in (3, 6, 10, 20, len(SECRET)):
+            assert api.search(q=SECRET[:n])["total"] == 0, f"leaked at {n} chars"
+
+    def test_public_nodes_are_still_findable(self, seeded, api):
+        """Guards the tests above against passing because search is simply broken."""
+        api.set_mask("secret1", True)
+        assert [r["id"] for r in api.search(q="yield")["results"]] == ["public1"]
+
+    def test_the_same_query_works_before_masking(self, seeded, api):
+        """Guards the test above: prove the query would have matched."""
+        assert api.search(q="PALLADIUM")["total"] == 1
+
+    def test_revealing_in_session_restores_matching(self, seeded, api):
+        api.set_mask("secret1", True)
+        assert api.search(q="palladium")["total"] == 0
+
+        api.reveal("secret1")
+        assert api.search(q="palladium")["total"] == 1
+
+        api.conceal("secret1")
+        assert api.search(q="palladium")["total"] == 0
+
+    def test_semantic_search_never_reaches_masked_nodes(self, seeded, api):
+        api.set_mask("secret1", True)
+
+        res = api.search(q=SECRET, mode="semantic", limit=50)
+
+        assert all(r["id"] != "secret1" for r in res["results"])
+
+    def test_masked_nodes_are_still_listable_by_structure(self, seeded, api):
+        """
+        Withholding content must not withhold the anchor. Browsing by
+        masked=True is the vault view, and it is supposed to work.
+        """
+        api.set_mask("secret1", True)
+
+        res = api.search(masked=True)
+
+        assert [r["id"] for r in res["results"]] == ["secret1"]
+        assert res["results"][0]["label"] == REDACTED
+        assert res["results"][0]["ntype"] == NodeType.CLAIM
+
+
+class TestSearchBrowsing:
+    def test_filters_by_type(self, seeded, api):
+        res = api.search(ntype=NodeType.PAPER)
+        assert [r["id"] for r in res["results"]] == ["paper1"]
+
+    def test_paging_covers_every_node_exactly_once(self, seeded, api):
+        seen = []
+        for offset in range(0, 10, 2):
+            seen += [r["id"] for r in api.search(limit=2, offset=offset)["results"]]
+
+        assert sorted(seen) == ["paper1", "public1", "secret1"]
+
+    def test_total_counts_matches_not_the_page(self, seeded, api):
+        res = api.search(limit=1)
+        assert len(res["results"]) == 1
+        assert res["total"] == 3
+
+    def test_unknown_sort_key_falls_back_rather_than_crashing(self, seeded, api):
+        """The sort key arrives from a query string; it cannot be trusted."""
+        res = api.search(sort="'; DROP TABLE nodes; --")
+        assert res["total"] == 3
+
+    def test_results_are_sorted_by_importance_descending(self, seeded, api):
+        scores = [r["importance"] for r in api.search()["results"]]
+        assert scores == sorted(scores, reverse=True)
+
+
+class TestGraphSlicing:
+    def test_focus_restricts_to_a_neighbourhood(self, seeded, api):
+        api.v.graph.add_node("far", NodeType.NOTE, "unconnected to anything")
+
+        res = api.graph(focus="paper1", hops=1)
+
+        ids = {n["id"] for n in res["nodes"]}
+        assert "far" not in ids
+        assert {"paper1", "public1", "secret1"} <= ids
+        assert res["focus"] == "paper1"
+
+    def test_unknown_focus_falls_back_to_the_whole_graph(self, seeded, api):
+        res = api.graph(focus="does-not-exist")
+        assert res["focus"] is None
+        assert len(res["nodes"]) == 3
+
+    def test_min_importance_filters(self, seeded, api):
+        res = api.graph(min_importance=0.99)
+        assert res["nodes"] == []
+        assert res["matched"] == 0
+        assert res["total_nodes"] == 3
+
+    def test_truncation_keeps_the_most_important(self, seeded, api):
+        res = api.graph(limit=1)
+        assert res["truncated"] is True
+        assert res["matched"] == 3
+        assert len(res["nodes"]) == 1
+        # The survivor is whatever scores highest, asserted against the graph
+        # rather than against a hardcoded id: the default importance table is a
+        # tuning knob (CLAIM 0.70 currently beats PAPER 0.65) and a test that
+        # pins one type is testing the knob, not the truncation.
+        best = max(d["metadata"]["importance_score"]
+                   for _, d in api.v.graph._g.nodes(data=True))
+        assert res["nodes"][0]["importance"] == best
+
+    def test_links_never_dangle(self, seeded, api):
+        res = api.graph(limit=2)
+        ids = {n["id"] for n in res["nodes"]}
+        for link in res["links"]:
+            assert link["source"] in ids and link["target"] in ids
+
+
+class TestQueryStringHardening:
+    def test_absurd_limit_is_clamped(self, seeded, api):
+        code, body = _dispatch_get(api, "/api/graph", {"limit": "999999999"})
+        assert code == 200
+        assert len(body["nodes"]) <= 5000
+
+    def test_garbage_limit_falls_back_to_the_default(self, seeded, api):
+        code, body = _dispatch_get(api, "/api/search", {"limit": "not-a-number"})
+        assert code == 200
+        assert body["limit"] == 50
+
+    def test_negative_offset_is_clamped(self, seeded, api):
+        code, body = _dispatch_get(api, "/api/search", {"offset": "-5"})
+        assert code == 200
+        assert body["offset"] == 0
+
+    def test_search_endpoint_is_routed(self, seeded, api):
+        code, body = _dispatch_get(api, "/api/search", {"q": "yield"})
+        assert code == 200
+        assert [r["id"] for r in body["results"]] == ["public1"]
+
+    def test_masked_flag_parses(self, seeded, api):
+        api.set_mask("secret1", True)
+        code, body = _dispatch_get(api, "/api/search", {"masked": "true"})
+        assert code == 200
+        assert [r["id"] for r in body["results"]] == ["secret1"]
+
+
+# ── scale: finding things in a graph too large to look at ─────────────────────
+
+class TestSearchPaging:
+    @pytest.fixture
+    def many(self, victor):
+        g = victor.graph
+        for i in range(120):
+            g.add_node(f"n{i}", NodeType.CLAIM, f"finding {i} about topic {i % 5}",
+                       metadata={"importance_score": i / 200.0,
+                                 "retrieval_count": 120 - i})
+        return victor
+
+    def test_paging_covers_everything_exactly_once(self, many, api):
+        seen, offset = [], 0
+        while True:
+            page = api.search(limit=25, offset=offset)
+            if not page["results"]:
+                break
+            seen += [r["id"] for r in page["results"]]
+            offset += 25
+        assert len(seen) == len(set(seen)) == 120
+
+    def test_total_is_the_match_count_not_the_page_size(self, many, api):
+        page = api.search(q="topic 3", limit=5)
+        assert len(page["results"]) == 5
+        assert page["total"] == 24
+
+    def test_sort_by_importance_is_descending(self, many, api):
+        scores = [r["importance"] for r in api.search(sort="importance", limit=10)["results"]]
+        assert scores == sorted(scores, reverse=True)
+
+    def test_sort_by_retrievals_differs_from_importance(self, many, api):
+        """An allowlisted sort key that silently fell back would be invisible."""
+        by_imp = [r["id"] for r in api.search(sort="importance", limit=5)["results"]]
+        by_ret = [r["id"] for r in api.search(sort="retrievals", limit=5)["results"]]
+        assert by_imp != by_ret
+
+    def test_unknown_sort_key_falls_back_instead_of_crashing(self, many, api):
+        assert api.search(sort="; DROP TABLE", limit=3)["results"]
+
+    def test_type_filter_narrows(self, many, api):
+        assert api.search(ntype=NodeType.PAPER)["total"] == 0
+        assert api.search(ntype=NodeType.CLAIM)["total"] == 120
+
+
+class TestGraphSlicingAtScale:
+    @pytest.fixture
+    def many(self, victor):
+        g = victor.graph
+        for i in range(300):
+            g.add_node(f"n{i}", NodeType.CLAIM, f"finding {i}",
+                       metadata={"importance_score": i / 300.0})
+        for i in range(299):
+            g.add_edge(f"n{i}", f"n{i + 1}", "related_to")
+        return victor
+
+    def test_truncation_keeps_the_most_important(self, many, api):
+        res = api.graph(limit=10)
+        assert res["truncated"] is True
+        assert res["total_nodes"] == 300
+        assert res["matched"] == 300
+        assert min(n["importance"] for n in res["nodes"]) > 0.9
+
+    def test_links_never_dangle(self, many, api):
+        res = api.graph(limit=50)
+        ids = {n["id"] for n in res["nodes"]}
+        for link in res["links"]:
+            assert link["source"] in ids and link["target"] in ids
+
+    def test_focus_returns_a_neighbourhood_not_the_graph(self, many, api):
+        res = api.graph(focus="n150", hops=2, limit=600)
+        ids = {n["id"] for n in res["nodes"]}
+        assert res["focus"] == "n150"
+        assert "n150" in ids
+        assert ids == {f"n{i}" for i in range(148, 153)}
+
+    def test_unknown_focus_falls_back_to_the_whole_graph(self, many, api):
+        res = api.graph(focus="does-not-exist", limit=600)
+        assert res["focus"] is None
+        assert res["matched"] == 300
+
+    def test_min_importance_filters_before_the_cut(self, many, api):
+        res = api.graph(limit=600, min_importance=0.5)
+        assert res["matched"] == len(res["nodes"]) == 150
+
+
+class TestQueryParamHardening:
+    def test_absurd_limit_is_clamped(self, seeded, api):
+        code, body = _dispatch_get(api, "/api/graph", {"limit": "999999999"})
+        assert code == 200
+        assert len(body["nodes"]) <= 5000
+
+    def test_garbage_limit_falls_back_to_the_default(self, seeded, api):
+        code, body = _dispatch_get(api, "/api/search", {"limit": "abc"})
+        assert code == 200
+        assert body["limit"] == 50
+
+    def test_negative_offset_is_clamped(self, seeded, api):
+        code, body = _dispatch_get(api, "/api/search", {"offset": "-5"})
+        assert code == 200
+        assert body["offset"] == 0
+
+    def test_masked_flag_parses(self, seeded, api):
+        api.set_mask("secret1", True)
+        code, body = _dispatch_get(api, "/api/search", {"masked": "true"})
+        assert code == 200
+        assert [r["id"] for r in body["results"]] == ["secret1"]
+
+    def test_search_is_routed(self, seeded, api):
+        code, body = _dispatch_get(api, "/api/search", {"q": "yield"})
+        assert code == 200
+        assert body["mode"] == "text"
+
+
+# ── the machine view: Victor doing the understanding, not the operator ────────
+
+class TestDeliberate:
+    """
+    /api/deliberate is the only endpoint where the *machine* decides what to
+    read. That makes it the one place a masked node could be opened without a
+    person choosing to open it, so it gets the same leak scan as everything
+    else — plus a check that the refusals actually appear in the response
+    rather than being quietly dropped on the way out.
+    """
+
+    def test_the_machine_reaches_the_masked_node_and_is_refused(self, seeded, api):
+        api.set_mask("secret1", True)
+        out = api.deliberate("what raises the catalyst yield", budget=5)
+
+        refusals = [s for s in out["deliberation"]["steps"] if not s["granted"]]
+        assert refusals, "the pass never even asked for the withheld memory"
+        assert any(s["node_id"] == "secret1" for s in refusals)
+        assert out["deliberation"]["refused"] >= 1
+
+    def test_the_whole_response_is_free_of_the_secret(self, seeded, api):
+        api.set_mask("secret1", True)
+        blob = json.dumps(api.deliberate("catalyst yield", budget=8), default=str)
+        assert SECRET not in blob
+        assert SECRET_VALUE not in blob
+        for n in (8, 12, 20, 40):
+            assert SECRET[:n] not in blob, f"leaked first {n} characters"
+
+    def test_the_masked_handle_is_still_offered(self, seeded, api):
+        """
+        A table that dropped the masked node would be tidier and would be
+        lying: the machine has to be able to see that something relevant is
+        being withheld from it.
+        """
+        api.set_mask("secret1", True)
+        table = api.deliberate("catalyst yield", budget=1)["deliberation"]["table"]
+        assert table["masked_count"] == 1
+        masked = next(p for p in table["points"] if p["masked"])
+        assert masked["descriptor"] == REDACTED
+        assert masked["ntype"] == NodeType.CLAIM      # structure still published
+
+    def test_a_session_reveal_authorises_the_machine(self, seeded, api):
+        """
+        Reveal is the operator's decision and it is the *only* thing that opens
+        the door. Without it the default is refuse-all, because a reasoning pass
+        that can unmask itself is not a boundary.
+        """
+        api.set_mask("secret1", True)
+        assert api.deliberate("catalyst yield", budget=8)["deliberation"]["refused"] >= 1
+
+        api.reveal("secret1")
+        out = api.deliberate("catalyst yield", budget=8)
+        assert out["revealed_this_session"] == ["secret1"]
+        opened = [s for s in out["deliberation"]["steps"]
+                  if s["granted"] and s["node_id"] == "secret1"]
+        assert opened, "an authorised handle was still refused"
+        assert SECRET in opened[0]["content"]
+
+    def test_every_step_states_a_reason(self, seeded, api):
+        api.set_mask("secret1", True)
+        steps = api.deliberate("catalyst yield", budget=4)["deliberation"]["steps"]
+        assert steps
+        assert all(s["reason"] for s in steps)
+
+    def test_the_conclusion_admits_what_it_could_not_read(self, seeded, api):
+        api.set_mask("secret1", True)
+        out = api.deliberate("catalyst yield", budget=8)
+        assert "incomplete record" in out["deliberation"]["answer"]
+
+    def test_it_runs_without_a_language_model(self, seeded, api):
+        """The field case: no network, no model, still has to deliberate."""
+        out = api.deliberate("catalyst yield", budget=3)
+        assert "policy" in out["chose_by"]
+        assert out["deliberation"]["steps"]
+
+    def test_budget_bounds_the_pass(self, seeded, api):
+        out = api.deliberate("catalyst yield", budget=2)
+        assert len(out["deliberation"]["steps"]) <= 2
+        assert out["deliberation"]["table"]["budget"] == 2
+
+    def test_a_ledger_line_is_written_per_request(self, seeded, api, victor):
+        ledger = victor.graph.graph_file.parent / "referral_ledger.jsonl"
+        api.set_mask("secret1", True)
+        out = api.deliberate("catalyst yield", budget=3)
+
+        rows = [json.loads(l) for l in ledger.read_text(encoding="utf-8").splitlines() if l]
+        assert len(rows) == len(out["deliberation"]["steps"])
+        assert any(r["granted"] is False for r in rows)
+        # The log records that a disclosure happened, never the disclosure.
+        assert SECRET not in ledger.read_text(encoding="utf-8")
+
+
+class TestDeliberateRouting:
+    def test_it_is_routed(self, seeded, api):
+        code, body = _dispatch_post(api, "/api/deliberate", {"query": "yield"})
+        assert code == 200
+        assert "deliberation" in body
+
+    def test_an_empty_query_is_rejected(self, seeded, api):
+        code, _ = _dispatch_post(api, "/api/deliberate", {"query": "   "})
+        assert code == 400
+
+    def test_a_junk_budget_falls_back(self, seeded, api):
+        code, body = _dispatch_post(api, "/api/deliberate",
+                                    {"query": "yield", "budget": "lots"})
+        assert code == 200
+        assert body["deliberation"]["table"]["budget"] == 3
+
+    def test_an_absurd_budget_is_clamped(self, seeded, api):
+        """The budget is the mechanism; an unbounded one is bulk retrieval."""
+        code, body = _dispatch_post(api, "/api/deliberate",
+                                    {"query": "yield", "budget": 10_000})
+        assert code == 200
+        assert body["deliberation"]["table"]["budget"] == 8
+
+    def test_sensor_ticks_are_clamped(self, seeded, api):
+        code, body = _dispatch_post(api, "/api/deliberate",
+                                    {"query": "yield", "sensors": 9999})
+        assert code == 200
+        assert body["sensors"]["ticks"] == 40
+
+
+class TestDeliberateWithSensors:
+    """
+    Live readings and stored memory in one table. The scenario's sensitive
+    reading is masked on arrival, so the machine meets the same boundary on a
+    fragment that it meets on a graph node.
+    """
+
+    SENSITIVE = "palladium-rich matrix"
+
+    def test_live_readings_join_the_table(self, seeded, api):
+        out = api.deliberate("is the site safe to enter", budget=3, sensors=8)
+        assert out["sensors"]["ticks"] == 8
+        assert out["sensors"]["readings"]
+        node_ids = {p["node_id"] for p in out["deliberation"]["table"]["points"]}
+        assert node_ids & {r["id"] for r in out["sensors"]["readings"]}
+
+    def test_a_sensitive_reading_is_withheld_on_arrival(self, seeded, api):
+        out = api.deliberate("what is the sample", budget=3, sensors=12)
+        blob = json.dumps(out, default=str)
+        assert self.SENSITIVE not in blob
+
+    def test_the_simulation_does_not_touch_the_real_graph(self, seeded, api, victor):
+        """A demonstration must not write simulated observations into real memory."""
+        before = victor.graph._g.number_of_nodes()
+        api.deliberate("is the site safe", budget=2, sensors=10)
+        assert victor.graph._g.number_of_nodes() == before
+
+    def test_stored_masked_memory_survives_a_busy_tick(self, seeded, api):
+        """
+        Regression: fragments used to take every anchor slot, so during a sensor
+        burst the graph's own masked nodes stopped being offered at all.
+        """
+        api.set_mask("secret1", True)
+        out = api.deliberate("catalyst yield", budget=1, sensors=12)
+        ids = {p["node_id"] for p in out["deliberation"]["table"]["points"]}
+        assert "secret1" in ids

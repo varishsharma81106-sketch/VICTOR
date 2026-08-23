@@ -158,7 +158,8 @@ button.act.danger:hover { border-color: var(--bad); color: var(--bad); }
 
 /* ── graph ───────────────────────────────────────────────────────────── */
 
-.graph-wrap { position: relative; height: calc(100vh - 175px); min-height: 460px;
+/* Leaves room for the topbar, tabs, and the slicing controls above it. */
+.graph-wrap { position: relative; height: calc(100vh - 240px); min-height: 420px;
   border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--bg-panel); }
 #graph-canvas { display: block; width: 100%; height: 100%; cursor: grab; }
 #graph-canvas.dragging { cursor: grabbing; }
@@ -227,9 +228,120 @@ button.act.danger:hover { border-color: var(--bad); color: var(--bad); }
 }
 .notice.warn { background: rgba(240,180,41,.09); border-color: rgba(240,180,41,.28); color: var(--warn); }
 
+/* ── find ────────────────────────────────────────────────────────────── */
+
+.find-bar { display: flex; gap: 9px; margin: 4px 0 12px; }
+#find-q {
+  flex: 1; background: var(--bg-raise); border: 1px solid var(--line);
+  border-radius: 6px; padding: 9px 13px; color: var(--text); font-size: 13.5px; font-family: var(--sans);
+}
+#find-q:focus { outline: none; border-color: var(--accent); }
+#find-btn {
+  background: var(--accent); border: none; border-radius: 6px;
+  color: #06121f; font-weight: 620; padding: 0 20px; cursor: pointer; font-size: 13px;
+}
+#find-note { min-height: 15px; margin: 2px 0 10px; }
+
+.pager { display: flex; gap: 12px; align-items: center; justify-content: center;
+  margin-top: 14px; font-size: 12px; color: var(--text-dim); }
+.pager button:disabled { opacity: .35; cursor: default; }
+.pager button:disabled:hover { border-color: var(--line); color: var(--text-dim); }
+
+/* ── graph slicing controls ──────────────────────────────────────────── */
+
+.graph-controls {
+  display: flex; gap: 15px; align-items: center; flex-wrap: wrap;
+  background: var(--bg-panel); border: 1px solid var(--line);
+  border-radius: 8px; padding: 10px 14px; margin-bottom: 12px;
+  font-size: 12px; color: var(--text-dim);
+}
+.graph-controls label { display: flex; align-items: center; gap: 7px; }
+.graph-controls #g-focus { width: 170px; }
+.graph-count { margin-left: auto; color: var(--text-faint); font-size: 11px; }
+
+select, input[type=text] {
+  background: var(--bg-raise); border: 1px solid var(--line); color: var(--text);
+  border-radius: 5px; padding: 4px 7px; font-size: 12px; font-family: var(--sans);
+}
+select:focus, input[type=text]:focus { outline: none; border-color: var(--accent); }
+
+/* ── machine view ────────────────────────────────────────────────────── */
+/*
+   Grants and refusals are given equal visual weight on purpose. The refusals
+   are the interesting half of a referral trace — a machine that renders what
+   it was denied in muted grey is telling you it got everything it wanted.
+*/
+
+.check { cursor: pointer; user-select: none; }
+.check input { accent-color: var(--accent); margin-right: 4px; }
+
+.ref-table { display: flex; flex-direction: column; gap: 6px; }
+
+.ref-point {
+  display: flex; gap: 11px; align-items: flex-start;
+  background: var(--bg-raise); border: 1px solid var(--line-soft);
+  border-left: 2px solid var(--line); border-radius: 5px; padding: 9px 11px;
+}
+.ref-point.masked  { border-left-color: var(--masked); }
+.ref-point.opened  { border-left-color: var(--accent); background: rgba(77,163,255,.05); }
+.ref-tag  { color: var(--accent); font-size: 11.5px; min-width: 26px; padding-top: 1px; }
+.ref-body { flex: 1; min-width: 0; }
+.ref-desc { font-size: 13px; line-height: 1.4; word-break: break-word; }
+.ref-desc.withheld, .withheld { color: var(--masked); letter-spacing: 1px; }
+.ref-props { font-size: 11px; color: var(--text-faint); margin-top: 3px; }
+.ref-props b { color: var(--masked); letter-spacing: .5px; }
+
+.trace { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; counter-reset: step; }
+.step {
+  background: var(--bg-raise); border: 1px solid var(--line-soft);
+  border-left: 3px solid var(--line); border-radius: 5px; padding: 11px 13px;
+}
+.step.granted { border-left-color: var(--good); }
+.step.refused { border-left-color: var(--bad); }
+.s-head { display: flex; gap: 9px; align-items: baseline; }
+.s-icon { font-size: 13px; }
+.step.granted .s-icon { color: var(--good); }
+.step.refused .s-icon { color: var(--bad); }
+.s-ref  { color: var(--accent); font-size: 11.5px; }
+.s-what { font-size: 13px; color: var(--text); }
+.s-reason {
+  margin: 7px 0 0; padding-left: 12px; border-left: 2px solid var(--line);
+  font-size: 12.5px; color: var(--text-dim); font-style: italic; line-height: 1.5;
+}
+.s-content {
+  margin-top: 9px; padding: 9px 11px; background: var(--bg);
+  border-radius: 4px; font-size: 12.5px; line-height: 1.55;
+  white-space: pre-wrap; color: var(--text);
+}
+.s-denial { margin-top: 8px; font-size: 12.5px; color: var(--bad); }
+
+.belief-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 9px; }
+.belief {
+  background: var(--bg-raise); border: 1px solid var(--line-soft);
+  border-top: 2px solid var(--good); border-radius: 5px; padding: 10px 11px;
+}
+.belief.masked { border-top-color: var(--masked); }
+.belief.wrong  { border-top-color: var(--bad); }
+.b-entity { font-size: 11px; color: var(--text-faint); text-transform: uppercase; letter-spacing: .5px; }
+.b-belief { font-size: 14px; margin: 4px 0 5px; }
+.belief.masked .b-belief { color: var(--masked); }
+.b-meta   { font-size: 10.5px; color: var(--text-faint); }
+
 /* ── misc ────────────────────────────────────────────────────────────── */
 
+/* Shown only when the page was opened off the filesystem — see app.js boot. */
+.file-warning {
+  position: fixed; inset: auto 0 0 0; z-index: 60;
+  background: rgba(240,180,41,.12); border-top: 1px solid rgba(240,180,41,.35);
+  color: var(--warn); font-size: 12.5px; text-align: center; padding: 11px 18px;
+}
+.file-warning code {
+  font-family: var(--mono); background: rgba(240,180,41,.14);
+  padding: 1px 6px; border-radius: 3px;
+}
+
 .filter-row { display: flex; gap: 16px; align-items: center; margin-bottom: 13px; font-size: 12.5px; color: var(--text-dim); }
+.filter-row.wrap { flex-wrap: wrap; gap: 14px; }
 .filter-row label { display: flex; align-items: center; gap: 9px; }
 input[type=range] { accent-color: var(--accent); }
 

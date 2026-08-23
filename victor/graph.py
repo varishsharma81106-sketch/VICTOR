@@ -22,6 +22,7 @@ import uuid
 logger = logging.getLogger(__name__)
 
 import networkx as nx
+import numpy as np
 
 from .models import (
     NodeType, EdgeType, EpistemicStatus,
@@ -56,6 +57,54 @@ _DEFAULT_EPISTEMIC = {
 }
 
 
+class _EmbeddingStore(dict):
+    """
+    A dict of node_id -> vector that tells the graph when it has changed.
+
+    The graph keeps a stacked float32 matrix of these vectors so similarity
+    search is one matmul instead of N Python calls. That cache is only safe if
+    *every* mutation invalidates it, and embeddings are written from six
+    different places in this file. Rather than remember to invalidate at each
+    one — the same "guard missed on one path" mistake that produced three
+    separate masking leaks in this codebase — mutation itself is the signal.
+    """
+
+    def __init__(self, *args, **kwargs):
+        self._dirty = True
+        super().__init__(*args, **kwargs)
+
+    def _touch(self):
+        self._dirty = True
+
+    def __setitem__(self, key, value):
+        self._touch()
+        super().__setitem__(key, value)
+
+    def __delitem__(self, key):
+        self._touch()
+        super().__delitem__(key)
+
+    def pop(self, *args, **kwargs):
+        self._touch()
+        return super().pop(*args, **kwargs)
+
+    def popitem(self):
+        self._touch()
+        return super().popitem()
+
+    def clear(self):
+        self._touch()
+        super().clear()
+
+    def update(self, *args, **kwargs):
+        self._touch()
+        super().update(*args, **kwargs)
+
+    def setdefault(self, *args, **kwargs):
+        self._touch()
+        return super().setdefault(*args, **kwargs)
+
+
 class VictorKnowledgeGraph:
     def __init__(
         self,
@@ -67,56 +116,132 @@ class VictorKnowledgeGraph:
         self.embedder           = embedder
         self.conflict_detector  = conflict_detector
         self._g:         nx.DiGraph            = nx.DiGraph()
-        self._embeddings: Dict[str, List[float]] = {}
+        self._embeddings: Dict[str, List[float]] = _EmbeddingStore()
+        self._emb_ids:    List[str]               = []
+        self._emb_matrix: Optional[np.ndarray]    = None
         self._load()
 
     # ── Persistence ───────────────────────────────────────────────────────────
+    #
+    # Vectors live beside the graph, not inside it.
+    #
+    # Embeddings are ~95% of the bytes: at 10,000 nodes the single-file format
+    # produced a 117 MB JSON that took 8.9 s to write and 2.4 s to read, and it
+    # was rewritten in full after every ingest. 384 float64s rendered as decimal
+    # text cost ~8 KB per node; the same vector as binary float32 costs 1.5 KB.
+    # Splitting them makes graph.json small enough to stay human-readable and
+    # diffable — which is the reason it was JSON in the first place.
+    #
+    # Old single-file graphs still load; the next save migrates them.
+
+    @property
+    def _emb_file(self) -> Path:
+        return self.graph_file.with_suffix(".emb.npz")
 
     def _load(self):
-        if self.graph_file.exists():
-            try:
-                with open(self.graph_file) as f:
-                    data = json.load(f)
-                self._g          = nx.node_link_graph(data["graph"], edges="links")
-                self._embeddings = data.get("embeddings", {})
-                logger.info(
-                    "Loaded graph: %d nodes, %d edges from %s",
-                    self._g.number_of_nodes(),
-                    self._g.number_of_edges(),
-                    self.graph_file,
-                )
-            except Exception as exc:
-                # Previously swallowed silently — a corrupted graph.json would
-                # produce an empty graph with no warning, causing silent data loss.
-                logger.error(
-                    "Failed to load graph from %s: %s — starting with empty graph. "
-                    "Original file preserved; investigate before next save.",
-                    self.graph_file,
-                    exc,
-                )
-                self._g          = nx.DiGraph()
-                self._embeddings = {}
+        if not self.graph_file.exists():
+            return
+        try:
+            with open(self.graph_file) as f:
+                data = json.load(f)
+            self._g = nx.node_link_graph(data["graph"], edges="links")
+
+            inline = data.get("embeddings") or {}
+            if inline:
+                # Legacy single-file graph, or a ragged-dimension fallback.
+                self._embeddings = _EmbeddingStore(inline)
+            else:
+                self._embeddings = _EmbeddingStore(self._load_embeddings())
+
+            logger.info(
+                "Loaded graph: %d nodes, %d edges, %d embeddings from %s",
+                self._g.number_of_nodes(),
+                self._g.number_of_edges(),
+                len(self._embeddings),
+                self.graph_file,
+            )
+        except Exception as exc:
+            # Previously swallowed silently — a corrupted graph.json would
+            # produce an empty graph with no warning, causing silent data loss.
+            logger.error(
+                "Failed to load graph from %s: %s — starting with empty graph. "
+                "Original file preserved; investigate before next save.",
+                self.graph_file,
+                exc,
+            )
+            self._g          = nx.DiGraph()
+            self._embeddings = _EmbeddingStore()
+
+    def _load_embeddings(self) -> Dict[str, List[float]]:
+        if not self._emb_file.exists():
+            return {}
+        try:
+            with np.load(self._emb_file, allow_pickle=False) as npz:
+                ids = npz["ids"]
+                mat = npz["vectors"]
+            return {str(i): v.tolist() for i, v in zip(ids, mat)}
+        except Exception as exc:
+            # A missing or unreadable sidecar degrades search quality but must
+            # not cost the user their graph — the topology is the irreplaceable
+            # part, and embeddings can be recomputed from labels.
+            logger.error(
+                "Failed to load embeddings from %s: %s — graph loaded without "
+                "vectors; semantic search will be empty until re-embedded.",
+                self._emb_file,
+                exc,
+            )
+            return {}
 
     def save(self):
-        """Atomically persist the graph.
+        """Atomically persist the graph and its vector sidecar.
 
-        Writes to a .tmp sibling first, then renames over the target.
-        A crash mid-write leaves the .tmp orphan; the original file is
-        untouched.  Previously a crash mid-write corrupted graph.json
-        permanently (Bug #4 from the v4.5 known-bug list).
+        Each file is written to a .tmp sibling and renamed over the target, so
+        a crash mid-write leaves an orphan .tmp and the original intact (Bug #4
+        from the v4.5 known-bug list).
+
+        The sidecar is renamed *before* graph.json. A crash between the two
+        renames therefore leaves new vectors with an old topology, and vectors
+        for nodes that do not exist are already skipped by every reader. The
+        reverse order would leave nodes with no vector, which silently drops
+        them out of search.
         """
         self.graph_file.parent.mkdir(parents=True, exist_ok=True)
-        data = {
-            "graph":      nx.node_link_data(self._g, edges="links"),
-            "embeddings": self._embeddings,
-        }
-        tmp_file = self.graph_file.with_suffix(".tmp")
+        payload = {"graph": nx.node_link_data(self._g, edges="links")}
+
+        ids, matrix = self._stack_embeddings()
+        if matrix is None:
+            # Ragged or non-numeric vectors — usually a mid-life embedder model
+            # change. Fall back to inlining rather than dropping them.
+            if self._embeddings:
+                payload["embeddings"] = dict(self._embeddings)
+            # Any sidecar still on disk is now stale, and _load prefers the
+            # inline copy only when it is non-empty — leaving the old file would
+            # resurrect deleted vectors on the next load.
+            self._emb_file.unlink(missing_ok=True)
+        else:
+            def _write_npz(p: Path) -> None:
+                # Handed an open file, not a path: np.savez appends ".npz" to
+                # any path that lacks it, which would turn the atomic temp file
+                # "graph.emb.npz.tmp" into "graph.emb.npz.tmp.npz" and leave the
+                # rename pointing at nothing.
+                with open(p, "wb") as fh:
+                    np.savez(fh, ids=np.array(ids), vectors=matrix)
+
+            self._atomic_write(self._emb_file, _write_npz)
+
+        self._atomic_write(
+            self.graph_file,
+            lambda p: p.write_text(json.dumps(payload, indent=2)),
+        )
+
+    @staticmethod
+    def _atomic_write(target: Path, write: Any) -> None:
+        tmp = target.with_suffix(target.suffix + ".tmp")
         try:
-            with open(tmp_file, "w") as f:
-                json.dump(data, f, indent=2)
-            tmp_file.replace(self.graph_file)   # atomic on POSIX
+            write(tmp)
+            tmp.replace(target)
         except Exception:
-            tmp_file.unlink(missing_ok=True)    # clean up orphan on failure
+            tmp.unlink(missing_ok=True)
             raise
 
     # ── Nodes ─────────────────────────────────────────────────────────────────
@@ -545,6 +670,48 @@ class VictorKnowledgeGraph:
 
     # ── Retrieval ─────────────────────────────────────────────────────────────
 
+    def _stack_embeddings(self) -> Tuple[List[str], Optional[np.ndarray]]:
+        """
+        Return (ids, row-normalised float32 matrix), rebuilding only when the
+        embedding store has been mutated since the last call.
+
+        Returns (ids, None) when the vectors are ragged — different dimensions
+        in one graph, which happens if the embedder model changes mid-life.
+        Callers fall back to the per-vector path rather than guessing.
+        """
+        if self._emb_matrix is not None and not self._embeddings._dirty:
+            return self._emb_ids, self._emb_matrix
+
+        ids = list(self._embeddings.keys())
+        if not ids:
+            self._emb_ids, self._emb_matrix = [], None
+            self._embeddings._dirty = False
+            return [], None
+
+        try:
+            mat = np.asarray([self._embeddings[i] for i in ids], dtype=np.float32)
+        except (ValueError, TypeError):
+            mat = None
+        if mat is None or mat.ndim != 2:
+            logger.warning(
+                "Embeddings are not a uniform matrix (%d vectors) — falling back "
+                "to per-vector similarity. Re-embed the graph to restore speed.",
+                len(ids),
+            )
+            self._emb_ids, self._emb_matrix = ids, None
+            self._embeddings._dirty = False
+            return ids, None
+
+        # LocalEmbedder already returns unit vectors, but conversation turns and
+        # legacy graphs may carry un-normalised ones. Normalising once here is
+        # what lets the query be a bare dot product.
+        norms = np.linalg.norm(mat, axis=1, keepdims=True)
+        np.divide(mat, norms, out=mat, where=norms > 0)
+
+        self._emb_ids, self._emb_matrix = ids, mat
+        self._embeddings._dirty = False
+        return ids, mat
+
     def semantic_query(
         self,
         query:         str,
@@ -553,7 +720,53 @@ class VictorKnowledgeGraph:
     ) -> List[Tuple[str, float, Dict]]:
         if not self._embeddings:
             return []
-        q_emb  = self.embedder.embed(query)
+        q_emb = self.embedder.embed(query)
+
+        ids, mat = self._stack_embeddings()
+        if mat is None:
+            return self._semantic_query_scalar(q_emb, top_k, ntype_filter)
+
+        q = np.asarray(q_emb, dtype=np.float32)
+        if q.shape[0] != mat.shape[1]:
+            # Query embedder disagrees with the stored vectors — comparing them
+            # would produce a shape error or, worse, a meaningless number.
+            logger.error(
+                "Query embedding is %d-dim but the graph stores %d-dim vectors; "
+                "returning no results rather than nonsense scores.",
+                q.shape[0], mat.shape[1],
+            )
+            return []
+        qn = float(np.linalg.norm(q))
+        if qn > 0:
+            q = q / qn
+
+        sims = mat @ q
+
+        # Rank first, filter second. Filtering is per-node Python work, so doing
+        # it after the sort means it touches only as many nodes as it takes to
+        # fill top_k — typically top_k itself, not the whole graph.
+        results: List[Tuple[str, float, Dict]] = []
+        for idx in np.argsort(-sims):
+            nid = ids[idx]
+            if not self._g.has_node(nid):
+                continue
+            if self.node_is_masked(nid):
+                continue
+            node_data = self._g.nodes[nid]
+            if ntype_filter and node_data.get("ntype") != ntype_filter:
+                continue
+            results.append((nid, float(sims[idx]), node_data))
+            if len(results) >= top_k:
+                break
+        return results
+
+    def _semantic_query_scalar(
+        self,
+        q_emb:        List[float],
+        top_k:        int,
+        ntype_filter: Optional[str],
+    ) -> List[Tuple[str, float, Dict]]:
+        """Ragged-embedding fallback. Correct, O(N) in Python, and rare."""
         scores = []
         for nid, emb in self._embeddings.items():
             if not self._g.has_node(nid):
@@ -563,40 +776,50 @@ class VictorKnowledgeGraph:
             node_data = self._g.nodes[nid]
             if ntype_filter and node_data.get("ntype") != ntype_filter:
                 continue
-            score = LocalEmbedder.cosine(q_emb, emb)
-            scores.append((nid, score, node_data))
+            if len(emb) != len(q_emb):
+                continue
+            scores.append((nid, LocalEmbedder.cosine(q_emb, emb), node_data))
         scores.sort(key=lambda x: x[1], reverse=True)
         return scores[:top_k]
 
     def get_neighbors(
         self, node_id: str, hops: int = 2
     ) -> List[Tuple[str, Dict, str]]:
-        if not self._g.has_node(node_id):
+        """
+        Nodes reachable from `node_id` within `hops` edges, either direction.
+
+        `hops` counts edges walked and excludes the focus itself: hops=1 is the
+        immediate neighbours, hops=2 adds theirs. The previous version expanded
+        nodes that had already reached the limit, so every caller got one hop
+        more than it asked for — a configured `graph_hop_depth` of 2 pulled
+        3-hop nodes into retrieval context, which on a dense graph is an order
+        of magnitude more text for the model to read.
+        """
+        if not self._g.has_node(node_id) or hops < 1:
             return []
-        visited  = set()
+        visited  = {node_id}
         frontier = [(node_id, 0)]
         results  = []
         while frontier:
             nid, depth = frontier.pop(0)
-            if nid in visited or depth > hops:
+            if depth >= hops:
                 continue
-            visited.add(nid)
-            for _, neighbor, edge_data in self._g.out_edges(nid, data=True):
-                if neighbor not in visited:
-                    results.append((
-                        neighbor,
-                        self._g.nodes[neighbor],
-                        edge_data.get("etype", "related"),
-                    ))
-                    frontier.append((neighbor, depth + 1))
-            for predecessor, _, edge_data in self._g.in_edges(nid, data=True):
-                if predecessor not in visited:
-                    results.append((
-                        predecessor,
-                        self._g.nodes[predecessor],
-                        edge_data.get("etype", "related"),
-                    ))
-                    frontier.append((predecessor, depth + 1))
+            adjacent = [(n, d) for _, n, d in self._g.out_edges(nid, data=True)]
+            adjacent += [(n, d) for n, _, d in self._g.in_edges(nid, data=True)]
+            for neighbor, edge_data in adjacent:
+                if neighbor in visited:
+                    continue
+                # Marked on discovery rather than on expansion. BFS reaches a
+                # node by its shortest path first, so this also fixes the
+                # duplicate a node found from two parents in the same layer
+                # used to produce.
+                visited.add(neighbor)
+                results.append((
+                    neighbor,
+                    self._g.nodes[neighbor],
+                    edge_data.get("etype", "related"),
+                ))
+                frontier.append((neighbor, depth + 1))
         return results
 
     # ── Importance + temporal decay ───────────────────────────────────────────

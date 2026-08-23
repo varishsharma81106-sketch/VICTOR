@@ -379,6 +379,104 @@ def ask(ctx, query, full, show_patterns, digest):
         _show_pattern_digest(v)
 
 
+@cli.command()
+@click.argument("query")
+@click.option("--budget", default=3, type=int,
+              help="How many referral points may be dereferenced (default: 3).")
+@click.option("--sensors", default=0, type=int,
+              help="Run this many ticks of the robot scenario first and offer the "
+                   "live readings into the same table.")
+@click.option("--llm/--no-llm", "use_llm", default=False,
+              help="Let the language model choose the handles instead of the "
+                   "built-in policy (default: policy, which needs no model).")
+@click.pass_context
+def consider(ctx, query, budget, sensors, use_llm):
+    """
+    Reason by requesting memory one piece at a time, with a reason for each.
+
+    `ask` retrieves in bulk: five chunks arrive by cosine similarity and the
+    model explains whatever it was handed. `consider` shows the other shape.
+    Victor is offered a table of referral points -- one line per memory saying
+    what it IS (type, epistemic tier, confidence, degree, age, match) and never
+    what it says -- and it spends a budget: one handle, one stated reason, one
+    grant or refusal, all of it written to a ledger beside the graph.
+
+    Masked memory is the reason this exists. Under `ask` a masked node is an
+    inert anchor the model can read about and not act on. Here it is a door the
+    machine can knock on, and the refusal is part of the answer.
+    """
+    from .referral import DeliberateReasoner, PolicyChooser, ReferralDesk, summarise
+
+    v = _v(ctx)
+    fragments = []
+
+    if sensors > 0:
+        import tempfile
+        from pathlib import Path as _Path
+
+        from .graph import VictorKnowledgeGraph
+        from .simulation import STRANDED_SITE, Simulation
+
+        console.print(f"[dim]-> running {sensors} tick(s) of {STRANDED_SITE.name} "
+                      f"on a scratch graph[/dim]")
+        with tempfile.TemporaryDirectory(prefix="victor-consider-") as tmp:
+            scratch = VictorKnowledgeGraph(_Path(tmp) / "sim.json", v.embedder)
+            sim = Simulation(scratch, STRANDED_SITE, seed=7,
+                             save_dir=_Path(tmp) / "frames")
+            sim.run(ticks=sensors)
+            fragments = sim.fragments()
+
+    llm = v.llm if use_llm and v.llm and v.llm.is_available() else None
+    desk = ReferralDesk(
+        v.graph,
+        vector_store=v.vector_store,
+        budget=budget,
+        ledger_path=v.graph.graph_file.parent / "referral_ledger.jsonl",
+    )
+    result = DeliberateReasoner(
+        desk, llm=llm, chooser=None if llm else PolicyChooser()
+    ).run(query, fragments=fragments)
+
+    table = Table(title=f"Referral points for: {query}")
+    table.add_column("Ref", style="cyan")
+    table.add_column("Type")
+    table.add_column("Standing")
+    table.add_column("Conf", justify="right")
+    table.add_column("Deg", justify="right")
+    table.add_column("Match", justify="right")
+    table.add_column("Descriptor")
+    for p in result.table.points:
+        table.add_row(
+            p.ref, p.ntype, p.epistemic_status, f"{p.confidence:.2f}",
+            str(p.degree), f"{p.relevance:.2f}",
+            f"[magenta]{p.descriptor}[/magenta]" if p.masked else p.descriptor,
+        )
+    console.print()
+    console.print(table)
+
+    console.print()
+    console.print(f"[dim]chosen by {'the language model' if llm else 'policy (no model)'}"
+                  f" | budget {result.table.budget}[/dim]")
+    for step in result.steps:
+        mark = "[green]v[/green]" if step.granted else "[red]x[/red]"
+        console.print(f"\n{mark} [cyan]{step.ref}[/cyan] {step.node_id or ''}")
+        console.print(f"  [dim italic]“{step.reason or 'no reason given'}”[/dim italic]")
+        if step.granted:
+            body = (step.content or "").strip().replace("\n", " ")
+            console.print(f"  {body[:300]}{'...' if len(body) > 300 else ''}")
+        else:
+            console.print(f"  [red]refused - {step.denial}[/red]")
+
+    console.print()
+    console.print(Panel(result.answer or "(no conclusion)",
+                        title="[bold]Conclusion[/bold]",
+                        border_style="yellow" if result.refused else "green"))
+    console.print(f"[dim]{summarise(result)}[/dim]")
+    if result.refused:
+        console.print("[dim]Refused handles are recorded in "
+                      "referral_ledger.jsonl beside the graph.[/dim]")
+
+
 def _show_pattern_digest(v: Victor):
     """Display a PatternDetector digest panel."""
     digest = v.get_pattern_digest()
@@ -853,6 +951,102 @@ def serve(ctx, port: int, host: str, open_browser: bool):
         console.print(f"[red]Could not bind {host}:{port}[/red] — {exc}")
         raise SystemExit(1)
     console.print("\n[dim]Console stopped.[/dim]")
+
+
+# ── Sensor simulation ─────────────────────────────────────────────────────────
+
+@cli.command()
+@click.option("--scenario", default="stranded-site", show_default=True,
+              help="Which world to run.")
+@click.option("--ticks", default=40, show_default=True, help="How many steps.")
+@click.option("--seed", default=7, show_default=True, help="Same seed, same run.")
+@click.option("--into", type=click.Path(), default=None,
+              help="Graph directory to populate. Defaults to a scratch dir so a "
+                   "demo never contaminates your real knowledge base.")
+@click.option("--live/--summary-only", default=True, show_default=True,
+              help="Print each tick as it happens.")
+@click.pass_context
+def simulate(ctx, scenario: str, ticks: int, seed: int, into: Optional[str], live: bool):
+    """
+    Run Victor as the brain of a sensor-equipped machine.
+
+    Simulated instruments of known, differing reliability observe a world whose
+    ground truth is scripted, so every belief Victor forms can be scored against
+    what was actually true. Watch the density and margin columns: they are the
+    compounding claim from VICTOR_THEORY_v1 made observable.
+    """
+    from .simulation import SCENARIOS, Simulation
+    from .graph import VictorKnowledgeGraph
+    from .embedder import LocalEmbedder
+
+    if scenario not in SCENARIOS:
+        console.print(f"[red]Unknown scenario '{scenario}'.[/red] "
+                      f"Available: {', '.join(sorted(SCENARIOS))}")
+        raise SystemExit(2)
+    sc = SCENARIOS[scenario]
+
+    if into:
+        home = Path(into)
+        graph = VictorKnowledgeGraph(home / "graph.json", LocalEmbedder())
+    else:
+        home = Path(_v(ctx).config.home_dir).parent / f".victor_sim_{scenario}"
+        graph = VictorKnowledgeGraph(home / "graph.json", LocalEmbedder())
+
+    console.print(Panel(
+        f"[bold]{sc.name}[/bold] · seed {seed} · {ticks} ticks\n\n{sc.description}\n\n"
+        f"[dim]Instruments: "
+        + ", ".join(f"{s.name} ({s.reliability:.0%})" for s in sc.sensors)
+        + f"\nWriting to {home}[/dim]",
+        title="Sensor simulation", border_style="cyan",
+    ))
+
+    sim = Simulation(graph, sc, seed=seed, save_dir=home / "frames")
+
+    def _render(t):
+        beliefs = " ".join(
+            f"[{'green' if b.correct else 'red'}]{b.entity}={'████' if b.masked else b.belief}"
+            f"(+{b.margin:.1f})[/]"
+            for b in t.beliefs
+        )
+        console.print(
+            f"[dim]t{t.tick:>3}[/dim] "
+            f"n={t.nodes:<5} e={t.edges:<6} density={t.density:>5.2f} "
+            f"conflicts={t.contradictions:<4} {beliefs}"
+        )
+
+    sim.run(ticks=ticks, on_tick=_render if live else None)
+    graph.save()
+    rep = sim.report()
+
+    table = Table(title="What the run demonstrated")
+    table.add_column("Entity")
+    table.add_column("Victor believes")
+    table.add_column("Support", justify="right")
+    table.add_column("Margin", justify="right")
+    table.add_column("Obs", justify="right")
+    table.add_column("Correct")
+    for b in rep["beliefs"]:
+        table.add_row(
+            b["entity"],
+            # Already redacted by Belief.as_dict — a demo that prints the secret
+            # to prove masking works has not proved masking works.
+            b["belief"],
+            f"{b['support']:.2f}",
+            f"{b['margin']:.2f}",
+            str(b["observations"]),
+            "[green]yes[/green]" if b["correct"] else "[red]no[/red]",
+        )
+    console.print(table)
+
+    console.print(Panel(
+        f"Connection density {rep['density_start']:.2f} → [bold]{rep['density_end']:.2f}[/bold] "
+        f"over {rep['ticks']} ticks\n"
+        f"{rep['correct_beliefs']}/{rep['entities']} entities understood correctly"
+        + (f", [yellow]{rep['unsettled']} unsettled[/yellow]" if rep["unsettled"] else "")
+        + f"\n{rep['contradictions']} contradictions recorded · {rep['masked']} readings masked on arrival\n\n"
+        f"[dim]victor --home {home} serve   → see it in the console[/dim]",
+        title="Result", border_style="green",
+    ))
 
 
 if __name__ == "__main__":
