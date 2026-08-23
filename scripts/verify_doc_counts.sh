@@ -24,9 +24,31 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-DOC="VICTOR_WHAT_IS_BUILT.md"
+DOC="docs/VICTOR_WHAT_IS_BUILT.md"
 
-REAL_COUNT=$(VICTOR_MOCK_LLM=1 python3 -m pytest --collect-only -q 2>/dev/null | tail -1 | grep -oE '^[0-9]+')
+# `python3` does not exist on the Windows box this repo is developed on, and
+# `set -e` turned that into a bare `exit 1` with no message — the script spent
+# a while reporting "drift" for a Python that was never there. Resolve the
+# interpreter first and say so if there isn't one.
+PY=""
+for candidate in python3 python py; do
+    if command -v "$candidate" >/dev/null 2>&1; then PY="$candidate"; break; fi
+done
+if [ -z "$PY" ]; then
+    echo "ERROR: no python3/python/py on PATH."
+    exit 2
+fi
+
+if [ ! -f "$DOC" ]; then
+    echo "ERROR: $DOC not found (run from anywhere inside the repo)."
+    exit 2
+fi
+
+# --color=no matters: with colour on, the summary line starts with an ANSI
+# escape rather than a digit, so an anchored '^[0-9]+' matches nothing and the
+# check fails for a reason that has nothing to do with the count.
+REAL_COUNT=$(VICTOR_MOCK_LLM=1 "$PY" -m pytest --collect-only -q --color=no 2>/dev/null \
+    | grep -oE '[0-9]+ tests? collected' | grep -oE '^[0-9]+' | tail -1 || true)
 
 if [ -z "$REAL_COUNT" ]; then
     echo "ERROR: couldn't collect tests — is pytest installed and the repo importable?"

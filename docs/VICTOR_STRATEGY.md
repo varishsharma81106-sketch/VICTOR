@@ -5,6 +5,13 @@
 
 ## 1. Competitive Landscape (as of June 2026)
 
+> **⚠ SUPERSEDED 2026-08-23 — see `VICTOR_COMPETITIVE_2026-08.md`.**
+> This section was re-checked against arXiv and section 1's headline claim is
+> **false as of August 2026**: at least six systems now implement a redaction or
+> trust boundary over agent memory, and Victor is behind on one of them
+> (derivation-restriction propagation). The epistemic-tier claim survived the
+> re-check. Read the newer document before quoting anything below.
+
 ### Category 1: Scientific Claim-Verification Agents
 - **PaperQA2** (FutureHouse) — built specifically for dense, jargon-heavy scientific literature. Exceeds human performance on QA, summarization, contradiction detection. Frontier-model-backed.
 - **OpenScholar** — synthesizes from 45M papers, outperforms GPT-4o by 5% on ScholarQABench.
