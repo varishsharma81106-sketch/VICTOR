@@ -1,0 +1,47 @@
+% Reproducibility Checklist -- Victor (AAAI-27)
+% Submit this as a separate PDF alongside the main paper.
+
+\documentclass[letterpaper]{article}
+\usepackage[submission]{aaai}
+\usepackage{times}
+\usepackage{helvet}
+\usepackage{courier}
+\usepackage[hyphens]{url}
+\usepackage{graphicx}
+\urlstyle{rm}
+\def\UrlFont{\rm}
+\usepackage{natbib}
+\usepackage{caption}
+\frenchspacing
+\setlength{\pdfpagewidth}{8.5in}
+\setlength{\pdfpageheight}{11in}
+
+\pdfinfo{/TemplateVersion (2027.1)}
+
+\title{Reproducibility Checklist\\Victor: A Hierarchical Multi-Model Research Intelligence Toolkit}
+
+\author{Anonymous Author(s)}
+\affiliations{}
+
+\begin{document}
+\maketitle
+
+This document accompanies the AAAI-27 submission ``Victor: A Hierarchical Multi-Model Research Intelligence Toolkit with Sovereign Masked Memory and Local-First Architecture.''
+
+\begin{enumerate}
+  \item \textbf{Source code publicly available?} Yes -- \url{https://github.com/victor-ai/victor}. MIT License.
+  \item \textbf{Benchmark data publicly available?} Yes -- SciFact dev set (\url{https://github.com/allenai/scifact}).
+  \item \textbf{All dependencies documented?} Yes -- \texttt{requirements.txt} and \texttt{setup.py}.
+  \item \textbf{Hardware used:} AMD Ryzen 7 5800X (8-core, 3.8 GHz), 32 GB RAM, no GPU.
+  \item \textbf{Operating system:} Ubuntu 22.04 (CI), Windows 11 (development).
+  \item \textbf{LLM backend:} Qwen2.5-7B via Ollama (\texttt{ollama pull qwen2.5:7b}).
+  \item \textbf{NLI model:} \texttt{cross-encoder/nli-deberta-v3-base} via \texttt{sentence-transformers}.
+  \item \textbf{Embedding model:} nomic-embed-text-v1.5, fallback all-MiniLM-L6-v2.
+  \item \textbf{Random seed:} Fixed at 42 for all SciFact runs.
+  \item \textbf{Number of runs:} 5 configurations as reported in Table~1 (n=50 or n=100).
+  \item \textbf{Confidence intervals:} Not reported -- n=100 in best configuration. Acknowledged in Limitations.
+  \item \textbf{Evaluation metric:} 3-class accuracy (confirm / contradict / inconclusive) on SciFact dev set.
+  \item \textbf{Hyperparameter search:} NLI override threshold tuning across \{0.3, 0.4, 0.5, 0.6\} -- no improvement beyond 71.0\%.
+\end{enumerate}
+
+\end{document}

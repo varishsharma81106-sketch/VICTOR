@@ -1,0 +1,48 @@
+% Abstract Only -- Victor AAAI-27 Submission
+% ANONYMOUS VERSION for double-blind review
+% Uses official AAAI-27 Author Kit (aaai2027.sty)
+%
+% AAAI-27 Requirements:
+%   - 7 pages content + 2 pages references (9 total max)
+%   - Anonymous: remove all author/affiliation info for review
+%   - Deadline: July 21, 2026 (abstracts), July 28, 2026 (full papers)
+
+\documentclass[letterpaper]{article} % DO NOT CHANGE THIS
+\usepackage[submission]{aaai2027}  % DO NOT CHANGE THIS
+% DO NOT add \usepackage{times}, \usepackage{helvet}, \usepackage{courier}
+% aaai2027.sty loads fonts automatically (newtxtext, helvet, courier)
+\usepackage[hyphens]{url}  % DO NOT CHANGE THIS
+\usepackage{graphicx} % DO NOT CHANGE THIS
+\urlstyle{rm} % DO NOT CHANGE THIS
+\def\UrlFont{\rm}  % DO NOT CHANGE THIS
+\usepackage{natbib}  % DO NOT CHANGE THIS AND DO NOT ADD ANY OPTIONS TO IT
+\usepackage{caption} % DO NOT CHANGE THIS AND DO NOT ADD ANY OPTIONS TO IT
+\frenchspacing  % DO NOT CHANGE THIS
+
+\pdfinfo{
+/TemplateVersion (2027.1)
+}
+
+\setcounter{secnumdepth}{0}
+
+\title{Victor: A Local-First Research Intelligence System with Epistemic Provenance and NLI-Augmented Conflict Detection}
+
+% AAAI-27: "The authors must remove all author and affiliation information
+% from their submission for review"
+\author{
+    Anonymous Author(s)
+}
+\affiliations{
+    Anonymous Institution\\
+    Anonymous@anonymous.com
+}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+Research knowledge is fragmented across disconnected tools---papers, notes, experiments---with no record of claim origin or confidence, allowing contradictions to accumulate unseen. We present Victor, a local-first research intelligence system that structures knowledge as typed Epistemic Artifacts with mandatory provenance tracking across a five-tier evidence hierarchy (measurement, experiment, literature, note, hypothesis). Victor introduces an NLI-primary conflict-detection architecture that inverts the standard LLM-primary pipeline: a cross-encoder NLI model decides entailment direction while the LLM supplies only reasoning traces, mitigating structured-output agreement bias where instruction-tuned models default to confirmation under uncertainty. A masked-memory primitive suppresses node content from LLM answers while preserving graph structure for routing, with corresponding vector embeddings deleted to close the membership-inference covert channel. The system operates through a bounded Retrieve--Reason--Review--Respond agent loop with hard tool-call limits and automatic pre-answer conflict review. On the SciFact claim verification benchmark, Victor's cross-check configuration (Qwen2.5-7B with DeBERTa-v3-base NLI) achieves 71.0\% accuracy, a 12-point improvement over the pure-LLM baseline. Victor is CPU-only and requires no cloud connectivity, enabling research intelligence in disconnected environments.
+\end{abstract}
+
+\end{document}

@@ -1,0 +1,91 @@
+% aaai.sty -- Minimal style file for AAAI-27 paper compilation
+% Based on the official AAAI formatting specifications:
+%   - Two-column layout
+%   - US Letter (8.5" x 11")
+%   - Times Roman font
+%   - Section heading formats
+%   - Abstract formatting
+%   - Bibliography handling via natbib
+%
+% This is a minimal reimplementation sufficient to compile the paper.
+% For official submission, use the Author Kit from aaai.org.
+
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{aaai}[2027/01/01 AAAI Press minimal style]
+
+% -- Silently ignore all options (submission, etc.)
+\DeclareOption*{}
+\ProcessOptions\relax
+
+% -- Paper size and margins
+\setlength{\textheight}{9.0in}
+\setlength{\textwidth}{6.75in}
+\setlength{\columnsep}{0.375in}
+\setlength{\oddsidemargin}{0.0in}
+\setlength{\evensidemargin}{0.0in}
+\setlength{\topmargin}{0.0in}
+\setlength{\headheight}{0.0in}
+\setlength{\headsep}{0.0in}
+\setlength{\parindent}{0.25in}
+\setlength{\parskip}{0.0in}
+\setlength{\columnseprule}{0.0in}
+
+% -- Double column
+\twocolumn
+\flushbottom
+
+% -- Section formatting
+\renewcommand{\section}{%
+  \@startsection{section}{1}{0pt}{-2.0ex plus -0.5ex minus -.2ex}%
+                {1.2ex plus 0.3ex minus 0.2ex}%
+                {\Large\bfseries\MakeUppercase}}
+\renewcommand{\subsection}{%
+  \@startsection{subsection}{2}{0pt}{-1.8ex plus -0.5ex minus -.2ex}%
+                {0.8ex plus 0.2ex}%
+                {\large\bfseries}}
+\renewcommand{\subsubsection}{%
+  \@startsection{subsubsection}{3}{0pt}{-1.5ex plus -0.5ex minus -.2ex}%
+                {0.5ex plus 0.2ex}%
+                {\normalsize\bfseries}}
+
+% -- Title
+\newcommand{\titlebox}[1]{\parbox{\textwidth}{#1}}
+\def\@maketitle{%
+  \newpage
+  \begin{center}%
+  \let \footnote \thanks
+  {\LARGE \bfseries \@title \par}%
+  \vskip 0.5em%
+  {\large
+    \lineskip .5em%
+    \begin{tabular}[t]{c}%
+      \@author
+    \end{tabular}\par}%
+  \vskip 0.5em%
+  {\footnotesize \@affiliations \par}%
+  \vskip 1em%
+  {\small \@date}%
+  \end{center}%
+  \par
+  \vskip 0.5em%
+}
+
+% -- Abstract
+\renewenvironment{abstract}{%
+  \centerline{\bfseries\small Abstract}%
+  \vskip 0.5em%
+  \quotation\small\noindent\ignorespaces
+}{%
+  \endquotation
+  \vskip 1em%
+}
+
+% -- Affiliations
+\newcommand{\affiliations}[1]{\def\@affiliations{#1}}
+\let\@affiliations\@empty
+
+% -- Links
+\newcommand{\links}[1]{}
+\newcommand{\link}[2]{}
+
+\endinput
