@@ -1,0 +1,18 @@
+name: grok-review
+on: pull_request
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: curl -fsSL https://x.ai/cli/install.sh | bash
+      - run: grok -p "Review this PR for bugs, security issues, and code quality. Focus on:
+        1. Logic errors in reasoning.py (NLI cross-encoder, ConflictDetector)
+        2. Masking enforcement in core.py and reasoning.py
+        3. Thread safety in graph.py (atomic save)
+        4. Token counting in retrieve.py (bounded agent loop)
+        5. Test coverage gaps
+        Report critical issues first, then suggestions." --always-approve
+        env:
+          XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
+          GH_TOKEN: ${{ github.token }}

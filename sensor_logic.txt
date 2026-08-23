@@ -1,0 +1,15 @@
+ADC
+Sensors parameters that can be manipulated preprocessing
+MEMS
+Dynamic voltage reference 
+(Negative resistance) 
+
+
+
+
+
+
+
+
+
+
