@@ -1,10 +1,68 @@
 # VICTOR — SciFact Accuracy: Diagnosis & Action Plan
-*Working document · v5.3 · Updated 2026-08-12*
+*Working document · v5.4 · Updated 2026-08-23*
 *Supersedes all prior versions of this file. Update in place; do not create new versions per run.*
 
-> **Current state in one line:** Environment works. Benchmark runs. Best observed: **71.0%** (deberta-v3-base, cross-check, n=100). The label order inversion bug that caused primary mode to score 8–12% is diagnosed and fixed in v5.3. The remaining gap to ≥85% is accuracy, not setup.
+> **Current state in one line:** Environment works. Benchmark runs. Best observed: **71.0%** (deberta-v3-base, cross-check, n=100) — which is **zero-shot parity with fine-tuned SOTA**, not a mediocre score. The remaining 14 points to ≥85% are the gap between zero-shot and fine-tuned, and no published system crosses it without training. **The bar therefore mandates fine-tuning.** See Section 0.
 
-> **Update (2026-08-12):** Research findings confirm 71% is competitive (MultiVerS SOTA is 72-73%), SciClaims hit 88% with fine-tuned DeBERTa, and self-consistency voting requires temperature variation to work. See Section 9 for details.
+---
+
+## 0. The finding that reorders this document
+
+*Added 2026-08-23. This was already in the evidence — it was sitting at §9.1 and
+§9.2, below eight sections of tuning steps that cannot possibly close the gap.
+Promoting it, because it changes what to do first.*
+
+### 71.0% read against the field
+
+| System | Accuracy | Setup |
+|---|---|---|
+| **Victor, cross-check** | **71.0%** | Zero-shot. General 7B LLM + off-the-shelf NLI, no SciFact training |
+| MultiVerS (SOTA) | 72–73% | Purpose-built, fine-tuned on SciFact, Longformer backbone |
+| SciClaims | 88% | DeBERTa fine-tuned on the SciFact training set |
+
+Victor, with zero SciFact-specific training, is within 1–2 points of a
+purpose-built fine-tuned system. **The gap to 85% is not a gap between Victor
+and the field. It is the gap between zero-shot and fine-tuned.**
+
+### What follows from that
+
+**Threshold sweeps, prompt changes, and bigger off-the-shelf models cannot close
+a 14-point gap.** Section 9.6 prices them honestly: +1–3%, +3–5%, +2–3%. Even
+stacked, and even assuming they compose (they will not), that is a fraction of
+what is needed. They are worth running because they are nearly free, not because
+they are a plan.
+
+The only path with published evidence of clearing the bar is **fine-tuning
+DeBERTa on `data/claims_train.jsonl`** — 809 labelled claims, already on disk,
+CPU-feasible. SciClaims did approximately this and reached 88%. The
+architectural alternative is a **Longformer-based NLI checkpoint**, which
+addresses Cause D directly (linear attention over a passage-length premise) and
+is why MultiVerS uses one.
+
+Revised ordering: start fine-tuning **in parallel with** the cheap experiments,
+not after them. The cheap experiments are 30 minutes each; treating them as a
+prerequisite has cost weeks of not starting the thing that works.
+
+### The circularity that has to be resolved first
+
+`VICTOR_BUILD_SEQUENCE.md` gates LoRA fine-tuning (Phase 4C) on DoD #4, and §6
+of this document repeats the gate. If DoD #4 now requires fine-tuning, then:
+
+> **DoD #4 is gated on Phase 4C, and Phase 4C is gated on DoD #4.**
+
+This is a real deadlock in the plan, not a technicality, and it will not resolve
+itself. The proposed resolution is to split what the gate was actually written
+to prevent from what it now blocks by accident:
+
+| Activity | Gate | Why |
+|---|---|---|
+| Fine-tune a **task-specific NLI component** on a public labelled benchmark split | **Ungated — do it now** | Supervised training of a classifier on public data with a held-out eval. Auditable, reversible, versioned, and testable against the base model. This is ordinary ML engineering |
+| Fine-tune the **reasoning model on Victor's own accumulated user data** (Phase 4C) | **Stays gated on DoD #4** | This is what the gate was written for: training on unaudited data produced by a reasoning component whose accuracy is unverified. That produces a system nobody can audit, and the gate is correct |
+
+They are different activities and only the second carries the risk that motivated
+the rule. **This split needs an explicit decision from the founder before the
+fine-tuning work starts** — it is a change to a stated gate, and changing a gate
+quietly is exactly the failure mode this project keeps having.
 
 ---
 
@@ -232,8 +290,10 @@ n=100 has ±7% CI. DoD #4 requires a stable number: both seeds must land within 
 
 - Don't report a single n=50 or n=100 number as closing DoD #4. It doesn't.
 - Don't write another planning document. The next action is a benchmark command, not a file.
+- **Don't treat 71% as a failure.** It is zero-shot parity with fine-tuned SOTA (§0). Reading it as a bad score is what produced a step list of cheap tuning options against a gap that cheap tuning cannot close.
+- **Don't run the cheap steps *before* starting the fine-tune.** Run them in parallel. Each is 30 minutes; sequencing them ahead of the only path that clears the bar has already cost weeks.
 - ~~Don't trust any primary-mode result from before v5.3 — all prior primary-mode runs had the label order wrong.~~ **Update (2026-08-12):** Run 8 confirms primary mode with correct label order still scores 8%. The issue is model capacity, not label order. Primary mode with DeBERTa-v3-base is definitively ruled out for long scientific text.
-- Don't start Phase 5 (LoRA fine-tuning on Victor's own data) before DoD #4 closes.
+- Don't start Phase 4C (LoRA fine-tuning on Victor's *own accumulated data*) before DoD #4 closes. This gate stands. It does **not** cover fine-tuning a task-specific NLI component on a public benchmark split — see §0 for why those are different activities.
 - Don't swap to a wholly new model family before finishing the steps above. The NLI wiring is 90% of the fix; a new model wrapper starts from scratch.
 - **Don't use primary mode for SciFact.** Cross-encoder NLI models trained on MNLI (short sentence pairs) default to neutral on 200-word scientific abstracts. Cross-check mode is the correct architecture.
 
@@ -241,6 +301,7 @@ n=100 has ±7% CI. DoD #4 requires a stable number: both seeds must land within 
 
 ## 7. Definition of done for DoD #4
 
+- [ ] **Founder decision recorded on the §0 gate split** — fine-tuning a task-specific NLI component on public data is unblocked, Phase 4C stays gated. Nothing below can proceed to 85% without this
 - [ ] A benchmark run shows `NLI overrides fired` > 0 in the output (NLI is actually engaging, not silently skipped)
 - [ ] `contradict` recall is reported separately at every step — overall accuracy alone hid the real failure in every prior run
 - [ ] Smoke test passes for every model used (`validate_label_order()` output shows ✓ on both pairs)
@@ -319,3 +380,8 @@ By July 2026, MCP memory-server directories show a more crowded field. Several n
 ---
 
 *Research findings added 2026-08-12. Sources: MultiVerS paper, SciClaims paper, 2026 ensemble study.*
+
+*Section 0 added 2026-08-23 (v5.4). It contains no new research — it promotes
+what §9.1 and §9.2 already established, which had been sitting below eight
+sections of tuning steps that cannot close the gap. The findings were right; the
+ordering was wrong.*
