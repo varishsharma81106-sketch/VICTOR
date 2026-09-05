@@ -69,7 +69,7 @@ Abstract
 2.  Related Work (RAG, KG-QA, NLI, Agentic RAG, PKM)
 3.  System Design (Epistemic Artifact, graph, ingestion, retrieval,
                    conflict detection, reasoning, sovereignty, kernels)
-4.  Implementation (Python v5.3.0, 16 modules, 196 tests)
+4.  Implementation (Python v5.4.0, 22 modules, 421 tests — paper submitted at v5.3.0 with 16 modules/196 tests; v5.4 shipped Aug 23, 2026)
 5.  Evaluation (SciFact, 5 configurations, best 71.0%)
 6.  Discussion (agreement bias, label-order, covert channel)
 7.  Limitations (6 items)

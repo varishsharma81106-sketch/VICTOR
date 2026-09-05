@@ -1,5 +1,5 @@
 # PROMPT FOR AI ASSISTANTS
-## Working with Victor v5.3
+## Working with Victor v5.4
 
 ---
 
@@ -27,7 +27,7 @@ Victor is a **local-first research intelligence system** with epistemic provenan
 |------|--------|
 | **AAAI 2027 Paper** | ✅ Submitted (July 22, 2026) |
 | **Decision** | ⏳ Expected ~October 2026 |
-| **Codebase** | v5.3.0, 196/196 tests passing |
+| **Codebase** | v5.4.0, 421/421 tests passing |
 | **SciFact Benchmark** | 71.0% (cross-check mode, n=100) |
 | **DoD #4 (85%)** | ❌ Not yet met |
 | **Primary Mode** | ❌ Conclusively ruled out (8%) |
@@ -39,7 +39,7 @@ Victor is a **local-first research intelligence system** with epistemic provenan
 ```
 victor/
 ├── victor/           # Core Python package
-├── tests/            # 196 tests (12 files)
+├── tests/            # 421 tests (16 files)
 ├── docs/             # Documentation (Obsidian-compatible)
 ├── data/             # SciFact benchmark data
 ├── paper/            # AAAI 2027 paper
@@ -166,7 +166,7 @@ When working with Victor:
 
 2. **Never read all documents** — They contradict each other on version-specific details.
 
-3. **Check test count** — Current: 196/196. If tests fail, something broke.
+3. **Check test count** — Current: 421/421. If tests fail, something broke.
 
 4. **Run benchmark with OLLAMA_HOST set** — `export OLLAMA_HOST=http://127.0.0.1:11434`
 
@@ -183,7 +183,7 @@ When working with Victor:
 This ZIP contains the complete Victor project as of 2026-08-12:
 
 - `victor/` — Core Python package
-- `tests/` — 196 tests
+- `tests/` — 421 tests (16 files)
 - `docs/` — Documentation (Obsidian-compatible)
 - `data/` — SciFact benchmark data
 - `paper/` — AAAI 2027 paper
@@ -204,4 +204,4 @@ This ZIP contains the complete Victor project as of 2026-08-12:
 
 ---
 
-*Created: 2026-08-12 · Victor v5.3.0*
+*Created: 2026-08-12 · Updated 2026-09-05 · Victor v5.4.0*

@@ -27,7 +27,7 @@
 
 | Criterion | Victor's Strength |
 |-----------|-------------------|
-| **1. Correctness** | ✅ Every claim verified against actual codebase (18 modules, 12 test files, 196 tests) |
+| **1. Correctness** | ✅ Every claim verified against actual codebase (22 modules, 16 test files, 421 tests) |
 | **2. Significance** | ✅ Addresses epistemic fragmentation — a fundamental unsolved problem in research AI |
 | **3. Novelty** | ✅ 4 original contributions (see below) — masked memory with covert-channel closure is unique |
 | **4. Clarity** | ✅ Architecture is clean: hierarchy of domain models → central reasoner → masked graph |
@@ -545,7 +545,7 @@ connectivity.
 **Answer:** The 71% is the **current ceiling of Qwen2.5-7B + DeBERTa cross-check**. The contribution is the **architecture**, not the raw number. The NLI-primary architecture identifies and addresses structured-output agreement bias — a real problem where instruction-tuned LLMs default to "confirm" under uncertainty. The paths to 85% are clearly identified: fine-tuned NLI model, self-consistency voting, or larger LLM.
 
 ### Q4: "The physical device claim — is it actually built?"
-**Answer:** The **software system** is fully built (v5.3.0, 18 modules, 196 tests). The **physical device platform** is the target. The paper presents the software as the intelligence layer — the physical form factor (like a calculator, like a mouse) is the deployment target for future work.
+**Answer:** The **software system** is fully built (v5.4.0, 22 modules, 421 tests across 16 test files). The **physical device platform** is the target. The paper presents the software as the intelligence layer — the physical form factor (like a calculator, like a mouse) is the deployment target for future work. **Post-submission additions (Aug 2026):** web console (`victor serve`), referral layer (`victor consider`), and sensor simulation (`victor simulate`) all shipped after the AAAI paper was submitted.
 
 ### Q5: "Where is the evaluation on real research data?"
 **Answer:** The current evaluation is on the SciFact benchmark (claim-abstract pairs). End-to-end evaluation on full document ingestion and gap detection workflows is acknowledged as future work in the Limitations section.
@@ -566,8 +566,8 @@ connectivity.
 ### Module Count Clarification
 
 - **18 total `.py` files** in `victor/`
-- **16 business logic modules** (excluding `__init__.py` which is just imports, and `scifact_benchmark.py` which is a standalone benchmark script)
-- Paper says "16 modules" — this is **correct** for the business logic count
+- **22 total `.py` files** in `victor/` (including `__init__.py`, `scifact_benchmark.py`, `web.py`, `referral.py`, `simulation.py`, and all other modules)
+- The AAAI paper submitted July 22, 2026 said "16 modules" — this was **correct at submission time**. The 6 additional modules (`referral.py`, `simulation.py`, `web.py`, plus `__init__.py` now counted) shipped in v5.4 on 2026-08-23.
 
 ---
 

@@ -119,7 +119,7 @@ Successfully submitted Victor to AAAI 2027 Conference. This is a solo paper with
    - Fine-tune NLI model on SciFact training data
    - Try larger LLM if hardware allows
    - Implement self-consistency voting
-2. **Add more tests** - Currently 196 tests, expand coverage
+2. **Add more tests** - Currently 421 tests (was 196 at submission; v5.4 added 225 more). Expand coverage for chunker.py and extractor.py which still have zero dedicated tests.
 3. **Prepare code for release** - Clean up for MIT LICENSE
 4. **Document the system** - User guides, API docs
 
@@ -165,7 +165,7 @@ Successfully submitted Victor to AAAI 2027 Conference. This is a solo paper with
 | Improvement | +12 points |
 | LLM Model | Qwen2.5-7B |
 | NLI Model | DeBERTa-v3-base |
-| Test Suite | 196 tests |
+| Test Suite | 421 tests (16 files) — was 196 at submission; v5.4 added referral layer, sensor simulation, web console, core-loop regressions, and scale persistence |
 | Test Files | 12 |
 | Evaluation Samples | n=100 |
 | Tool Call Limit | 5 |

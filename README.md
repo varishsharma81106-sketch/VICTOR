@@ -30,7 +30,7 @@ Victor implements OWASP ASI06-aligned memory redaction. Masked nodes are exclude
 
 ## Status
 
-v5.3.0 · 212 tests passing · SciFact best: 71.0% (cross-check mode, n=100) · MCP server in progress
+v5.4.0 · 421 tests passing · SciFact best: 71.0% (cross-check mode, n=100) · Web console shipped · Referral layer + sensor simulation shipped
 
 ## License
 

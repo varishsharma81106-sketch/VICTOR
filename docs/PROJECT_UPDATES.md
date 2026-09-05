@@ -4,8 +4,8 @@
 
 ## Repository Status
 
-- **Current version:** v5.3.0
-- **Current project health:** Functional core pipeline, 212 tests passing
+- **Current version:** v5.4.0
+- **Current project health:** Functional core pipeline, 421 tests passing
 - **Major completed milestones:**
   - Phase 0: Software brain (text-only) — complete
   - Phase 1A: Audio ingestion — complete (simplified LibrosaFeatureClassifier)
@@ -149,7 +149,7 @@ Fixed content leak in masked memory anchors across three files:
 | `reasoning.py` | `_masked_summary()` | Leaked first 40 chars of label |
 | `retrieve.py` | `_make_anchor()` | Leaked first 40 chars of label |
 
-All three now show `[MASKED — claim — content withheld. Use 'victor unmask <id>']` with no content leakage. All 40 masking tests pass. All 212 tests pass.
+All three now show `[MASKED — claim — content withheld. Use 'victor unmask <id>']` with no content leakage. All 40 masking tests pass. All 212 tests pass at the time; now 421/421 at v5.4.
 
 ### Next Steps
 
@@ -160,4 +160,4 @@ All three now show `[MASKED — claim — content withheld. Use 'victor unmask <
 
 ---
 
-*Last updated: 2026-08-12 · Victor v5.3.0*
+*Last updated: 2026-08-12 · Updated 2026-09-05 · Victor v5.4.0*

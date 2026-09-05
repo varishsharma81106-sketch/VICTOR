@@ -8,7 +8,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="victor",
-    version="5.3.0",
+    version="5.4.0",
     license="Proprietary",
     author="Varish Sharma",
     classifiers=[

@@ -1,5 +1,5 @@
 # VICTOR — Project Status
-*Session: 2026-08-12 · Code version: v5.3.0*
+*Session: 2026-08-12 · Updated 2026-09-05 · Code version: v5.4.0*
 
 ---
 
@@ -68,9 +68,9 @@
 
 | Metric | Value |
 |--------|-------|
-| Version | v5.3.0 |
-| Tests | 212/212 passing |
-| Test files | 12 |
+| Version | v5.4.0 |
+| Tests | 421/421 passing |
+| Test files | 16 |
 | Python | 3.14 (alpha) |
 | LLM | Qwen2.5-7B (Ollama) |
 | NLI | DeBERTa-v3-base |
@@ -98,7 +98,7 @@
 
 1. ~~**`find_gaps()` leaks masked content**~~ — ✅ Fixed 2026-08-12. Removed 40-char label leak from all anchor methods.
 2. **Primary mode fails on long text** — DeBERTa-v3-base NLI defaults to neutral on 200-word abstracts.
-3. **No real research data ingested** — Phase 0 exit criteria require `victor gaps` on at least one real document.
+3. ~~**No real research data ingested**~~ — ✅ Resolved 2026-08-23. First real paper ingested (`arxiv_selective_cot_medical_qa.txt`), full loop exercised end-to-end.
 4. **Paper files untracked** — `paper/`, `paper 22july/`, `victor_aaai27.pdf` not in git.
 
 ---
@@ -177,6 +177,6 @@ Phase 1C — Spectral/Chemical ingestion           ← Requires hardware
 
 ---
 
-*Last updated: 2026-08-12 · Victor v5.3.0*
+*Last updated: 2026-08-12 · Updated 2026-09-05 · Victor v5.4.0*
 *For the latest code state, see [[VICTOR_WHAT_IS_BUILT]]*
 *For the benchmark path, see [[VICTOR_SCIFACT_ACCURACY_PLAN]]*

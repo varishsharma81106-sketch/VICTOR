@@ -34,7 +34,7 @@
 **Fix 4 — `core.py:mask()` wiring:**
 - Wired `delete_node_chunks()` into `mask()` method with try/except so mask operation succeeds even if ChromaDB deletion fails
 
-**Verification:** 212/212 tests passing after all masking fixes
+**Verification:** 212/212 tests passing after all masking fixes (now 421/421 at v5.4)
 
 ### 2. Windows Unicode Compatibility
 
@@ -49,7 +49,7 @@
 - `setup.py`: Added `python_requires=">=3.12"`
 - `requirements.txt`: Updated version comment from "v4.6" to "v5.3.0"
 
-**Verification:** 212/212 tests passing after all Unicode fixes
+**Verification:** 212/212 tests passing after all Unicode fixes (now 421/421 at v5.4)
 
 ### 3. MarkdownIngestor `--type` Flag
 
@@ -106,7 +106,7 @@
 - `README.md` already created with project pitch, install, quick start, security, status
 
 **Phase 3 — PROJECT_UPDATES.md:** Created `docs/PROJECT_UPDATES.md` with:
-- Repository status (v5.3.0, 212 tests, 71% SciFact)
+- Repository status (v5.3.0 at time, 212 tests; now v5.4.0, 421 tests, 71% SciFact)
 - Today's changes (all files modified/created/archived)
 - Future recommendations (High/Medium/Low/Research/Technical Debt)
 - Known issues
@@ -127,7 +127,7 @@
 
 **Phase 7 — Git Preparation:** 4 logical commits created (see below)
 
-**Phase 8 — Validation:** 212/212 tests passing after all changes
+**Phase 8 — Validation:** 212/212 tests passing after all changes (now 421/421 at v5.4)
 
 **Phase 9 — Version Snapshot:** `victor_v5.3.0_2026-06-29.zip` created (12.14 MB)
 

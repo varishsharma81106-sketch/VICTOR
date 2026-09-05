@@ -409,9 +409,7 @@ a SHA-256 reproducibility hash.
 
 \section{Implementation}
 
-Victor is implemented in Python (v5.3.0) as a package of 16 business logic
-modules totaling approximately 6,000 lines of code (18 total \texttt{.py} files
-including \texttt{\_\_init\_\_.py} imports and a standalone benchmark script).
+Victor is implemented in Python (v5.4.0) as a package of 22 modules totaling approximately 8,000 lines of code. **The AAAI paper was submitted on July 22, 2026 at v5.3.0** with 16 business logic modules and 196 tests; the v5.4 release on August 23, 2026 added the referral layer (`referral.py`), sensor simulation (`simulation.py`), and web console (`web.py` + `webui/`) after submission. The submitted paper's claims about no web API and 196 tests were accurate at submission time but are stale relative to v5.4.
 The system is organized around a central \texttt{Victor} controller class that
 orchestrates the following components:
 
@@ -570,15 +568,23 @@ We acknowledge the following limitations:
     AudioIngestor employs MFCC-based features, not deep neural network
     classifiers as originally planned. Classification accuracy for real-world
     audio events is unvalidated.
-    \item \textbf{No web API or graph visualization.} The system is CLI-only.
-    Interactive graph exploration and web-based interfaces are out of scope for
-    the current version.
+\item \textbf{No web API or graph visualization.} The system is CLI-only.
+Interactive graph exploration and web-based interfaces are out of scope for
+the current version. \textbf{Post-submission note (Aug 2026):} A web console
+(`victor serve`) was shipped in v5.4 with a canvas force-directed graph view,
+9 API endpoints, and a Machine tab for the referral layer. This limitation in
+the submitted paper is accurate as of July 22, 2026 but does not reflect
+v5.4.
     \item \textbf{SciFact target not yet met.} The 85\% accuracy threshold
     remains open. The current best of 71.0\% represents the combined ceiling of
     the current model configuration.
-    \item \textbf{Evaluation on benchmark pairs only.} No real research data has
-    been ingested and evaluated end-to-end. Validation has been on claim-abstract
-    pairs, not full document ingestion and gap detection workflows.
+\item \textbf{Evaluation on benchmark pairs only.} No real research data has
+been ingested and evaluated end-to-end. Validation has been on claim-abstract
+pairs, not full document ingestion and gap detection workflows. \textbf{Post-submission
+note (Aug 2026):} A real arXiv paper (`arxiv_selective_cot_medical_qa.txt`)
+was ingested in v5.4, producing 13 claims and 15 concepts, and the full
+retrieve→reason→report loop was exercised end-to-end. This limitation in the
+submitted paper is accurate as of July 22, 2026 but does not reflect v5.4.
     \item \textbf{Single-seed evaluation at n=100.} The 71.0\% result has wide
     confidence intervals. A full 300-sample, two-seed evaluation is required
     before the result can be considered stable.
