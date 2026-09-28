@@ -50,3 +50,5 @@ victor_v5_*_complete_*.zip
 # `nul` — a file Windows creates when a shell redirects to NUL and the shell
 # is POSIX enough to treat it as a filename. Never intentional.
 nul
+
+.claude/
